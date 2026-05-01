@@ -56,13 +56,17 @@ function buildMakefile(
 		'$(ELF)',
 		project.model.postBuild.createFlash ? '$(HEX)' : '',
 		project.model.postBuild.createList ? '$(LST)' : '',
-		project.model.postBuild.printSize ? '$(SIZ)' : '',
+		project.model.postBuild.printSize ? 'size-report' : '',
 	].filter((value) => value.length > 0);
+	const buildTargets = allTargets.join(' ');
+	const preBuildCommand = resolveBuildHookCommand(project.model, project.model.build.preScript);
+	const postBuildCommand = resolveBuildHookCommand(project.model, project.model.build.postScript);
+	const cleanCommands = buildCleanCommands(project);
 
 	return [
 		'SHELL := cmd',
 		'.DELETE_ON_ERROR:',
-		'.PHONY: all clean',
+		'.PHONY: all build-main pre-build post-build clean size-report',
 		'',
 		`CC := ${toToolPath(project.toolchainPaths.gcc)}`,
 		`CXX := ${toToolPath(project.toolchainPaths.gpp)}`,
@@ -73,7 +77,6 @@ function buildMakefile(
 		`ELF := ${path.basename(project.elfPath)}`,
 		`HEX := ${path.basename(project.hexPath)}`,
 		`LST := ${path.basename(project.lstPath)}`,
-		`SIZ := ${path.basename(project.sizPath)}`,
 		`LDFLAGS := ${linkerFlags}`,
 		`LIBS := ${libraries}`,
 		`OTHER_OBJS := ${otherObjects}`,
@@ -81,7 +84,25 @@ function buildMakefile(
 		`LIST_FLAGS := ${listFlags}`,
 		`SIZE_FLAGS := ${sizeFlags}`,
 		'',
-		'all: ' + allTargets.join(' '),
+		'all: post-build',
+		'',
+		'build-main: pre-build' + (buildTargets ? ` ${buildTargets}` : ''),
+		'',
+		'pre-build:',
+		...(preBuildCommand
+			? [
+				'\t@echo Running pre-build script',
+				`\t${preBuildCommand}`,
+			]
+			: ['\t@echo Pre-build step skipped']),
+		'',
+		'post-build: build-main',
+		...(postBuildCommand
+			? [
+				'\t@echo Running post-build script',
+				`\t${postBuildCommand}`,
+			]
+			: ['\t@echo Post-build step skipped']),
 		'',
 		'include sources.mk',
 		'include objects.mk',
@@ -111,16 +132,15 @@ function buildMakefile(
 			: '',
 		project.model.postBuild.printSize
 			? [
-				'$(SIZ): $(ELF)',
-				'\t@echo Printing size report: $@',
-				'\t"$(SIZE)" $(SIZE_FLAGS) "$<" > "$@"',
+				'size-report: $(ELF)',
+				'\t@echo Printing size report',
+				'\t"$(SIZE)" $(SIZE_FLAGS) "$<"',
 				'',
 			].join('\n')
 			: '',
 		'clean:',
 		'\t@echo Cleaning build directory',
-		'\t@for %D in (*) do @if exist "%D" @if /I not "%D"=="." rmdir /s /q "%D" 2>nul',
-		'\t@for %F in (*.o *.d *.mk *.elf *.hex *.lst *.siz *.map) do @if exist "%F" del /f /q "%F"',
+		...cleanCommands,
 		'',
 	].filter((value) => value.length > 0).join('\n');
 }
@@ -184,11 +204,19 @@ function buildSourceRule(model: WchProjectModel, source: ResolvedSourceFile): st
 
 function buildCompileArgs(model: WchProjectModel, language: ResolvedSourceFile['language']): string[] {
 	if (language === 'asm') {
+		const commonIncludePaths = uniqueStrings([...model.build.includePaths, ...model.assembler.includePaths]);
+		const commonSystemIncludePaths = uniqueStrings([
+			...model.build.includeSystemPaths,
+			...model.assembler.includeSystemPaths,
+		]);
+		const commonIncludeFiles = uniqueStrings([...model.build.includeFiles, ...model.assembler.includeFiles]);
+		const commonDefines = uniqueStrings([...model.build.definedSymbols, ...model.assembler.definedSymbols]);
+
 		return uniqueStrings([
 			...model.assembler.args,
-			...buildIncludeArgs(model, model.assembler.includePaths, model.assembler.includeSystemPaths),
-			...buildForcedIncludeArgs(model, model.assembler.includeFiles),
-			...buildDefineArgs(model.assembler.definedSymbols),
+			...buildIncludeArgs(model, commonIncludePaths, commonSystemIncludePaths),
+			...buildForcedIncludeArgs(model, commonIncludeFiles),
+			...buildDefineArgs(commonDefines),
 		]);
 	}
 
@@ -263,6 +291,50 @@ function formatMakeList(values: string[]): string {
 
 function joinArgs(values: string[]): string {
 	return values.filter((value) => value.length > 0).join(' ');
+}
+
+function buildCleanCommands(project: ResolvedBuildProject): string[] {
+	const generatedFiles = uniqueStrings([
+		'sources.mk',
+		'objects.mk',
+		...project.sources.map((source) => source.objectPath),
+		...project.sources.map((source) => source.dependencyPath),
+		...project.sources.map((source) => source.subdirMakefilePath),
+		path.basename(project.elfPath),
+		project.model.postBuild.createFlash ? path.basename(project.hexPath) : '',
+		project.model.postBuild.createList ? path.basename(project.lstPath) : '',
+		project.mapFilePath ? path.basename(project.mapFilePath) : '',
+	]);
+	const generatedDirectories = uniqueStrings(project.sources
+		.flatMap((source) => [
+			path.dirname(source.objectPath),
+			path.dirname(source.dependencyPath),
+			path.dirname(source.subdirMakefilePath),
+		])
+		.filter((value) => value && value !== '.'))
+		.sort((left, right) => right.localeCompare(left, 'en'));
+
+	return [
+		...generatedFiles.map((value) => `\t@if exist "${toToolPath(value)}" del /f /q "${toToolPath(value)}"`),
+		...generatedDirectories.map((value) => `\t@if exist "${toToolPath(value)}" rmdir /s /q "${toToolPath(value)}"`),
+	];
+}
+
+function resolveBuildHookCommand(model: WchProjectModel, script: string): string {
+	const trimmed = script.trim();
+	if (!trimmed) {
+		return '';
+	}
+
+	const replacedProjectPath = trimmed.replaceAll('${project}', toToolPath(model.folderPath));
+	if (/[|&<>]/.test(replacedProjectPath) || replacedProjectPath.startsWith('"') || /\s/.test(replacedProjectPath)) {
+		return replacedProjectPath;
+	}
+
+	const resolvedPath = path.isAbsolute(replacedProjectPath)
+		? replacedProjectPath
+		: path.resolve(model.folderPath, replacedProjectPath);
+	return `"${toToolPath(resolvedPath)}"`;
 }
 
 function toToolPath(value: string): string {

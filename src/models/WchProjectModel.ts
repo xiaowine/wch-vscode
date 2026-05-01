@@ -9,17 +9,33 @@ export type WchCompilerSettings = {
 	includeSystemPaths: string[];
 	includeFiles: string[];
 	definedSymbols: string[];
+	undefinedSymbols: string[];
+	doNotSearchSystemDirectories: boolean;
+	doNotSearchSystemCppDirectories: boolean;
+	preprocessOnly: boolean;
+	generateAssemblerListing: boolean;
+	saveTemporaryFiles: boolean;
+	verbose: boolean;
 	optimizationFlags: string[];
 	warningFlags: string[];
+	debuggingFlags: string[];
 	otherCompilerFlags: string[];
 	args: string[];
 };
 
 export type WchAssemblerSettings = {
+	usePreprocessor: boolean;
+	doNotSearchSystemDirectories: boolean;
+	preprocessOnly: boolean;
 	includePaths: string[];
 	includeSystemPaths: string[];
 	includeFiles: string[];
 	definedSymbols: string[];
+	undefinedSymbols: string[];
+	assemblerFlags: string[];
+	generateAssemblerListing: boolean;
+	saveTemporaryFiles: boolean;
+	verbose: boolean;
 	otherAssemblerFlags: string[];
 	warningFlags: string[];
 	args: string[];
@@ -43,12 +59,22 @@ export type WchLinkerSettings = {
 	useFloatWithNanoPrintf: boolean;
 	useFloatWithNanoScanf: boolean;
 	doNotUseSyscalls: boolean;
+	crossReference: boolean;
+	printLinkMap: boolean;
+	verbose: boolean;
+	picolibc: string;
+	useWchPrintffloat: boolean;
+	useWchPrintf: boolean;
+	useIqmath: boolean;
 	args: string[];
 };
 
 export type WchPostBuildSettings = {
 	createFlash: boolean;
 	flashOutputFormat: string;
+	copyOnlySectionText: boolean;
+	copyOnlySectionData: boolean;
+	copyOnlySections: string[];
 	flashFlags: string[];
 	flashArgs: string[];
 	createList: boolean;
@@ -73,6 +99,18 @@ export type WchPostBuildSettings = {
 	sizeOptions: {
 		hex: boolean;
 		showTotals: boolean;
+	};
+};
+
+export type WchResolvedToolchain = {
+	directoryName: string;
+	executablePrefix: string;
+	executables: {
+		gcc: string;
+		gpp: string;
+		objcopy: string;
+		objdump: string;
+		size: string;
 	};
 };
 
@@ -107,8 +145,13 @@ export type WchProjectModel = {
 		debugLink: string;
 		svdPath: string;
 	};
+	resolvedToolchain: WchResolvedToolchain;
 	build: {
 		configName: string;
+		parallelizationNumber: string;
+		stopOnFirstBuildError: boolean;
+		preScript: string;
+		postScript: string;
 		toolchainName: string;
 		commandPrefix: string;
 		compilerPath: string;
@@ -119,6 +162,9 @@ export type WchProjectModel = {
 		optimizationLevel: string;
 		functionSections: boolean;
 		dataSections: boolean;
+		commonOptimizationFlags: string[];
+		commonWarningFlags: string[];
+		commonDebuggingFlags: string[];
 		cStandard: string;
 		cppStandard: string;
 		includePaths: string[];

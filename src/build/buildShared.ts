@@ -45,32 +45,31 @@ export function getConfiguredMounRiverStudioPath(): string {
 
 export function resolveCompilerPathFromSetting(model: WchProjectModel): string | undefined {
 	const rootPath = getConfiguredMounRiverStudioPath();
-	return resolveToolchainPaths(rootPath, model.debug.gdbExecutable)?.gcc;
+	return resolveToolchainPaths(rootPath, model)?.gcc;
 }
 
 export function resolveToolchainPaths(
 	rootPath: string,
-	gdbExecutable: string,
+	model: WchProjectModel,
 ): ResolvedToolchainPaths | undefined {
 	if (!rootPath) {
 		return undefined;
 	}
 
-	const toolchainDirectoryName = resolveToolchainDirectoryName(gdbExecutable);
-	const toolExecutablePrefix = resolveToolExecutablePrefix(gdbExecutable);
-	if (!toolchainDirectoryName || !toolExecutablePrefix) {
+	const { resolvedToolchain } = model;
+	if (!resolvedToolchain.directoryName) {
 		return undefined;
 	}
 
-	const binPath = path.join(rootPath, ...TOOLCHAIN_ROOT_SEGMENTS, toolchainDirectoryName, 'bin');
+	const binPath = path.join(rootPath, ...TOOLCHAIN_ROOT_SEGMENTS, resolvedToolchain.directoryName, 'bin');
 	return {
 		rootPath,
 		make: path.join(rootPath, ...MAKE_EXECUTABLE_SEGMENTS),
-		gcc: path.join(binPath, `${toolExecutablePrefix}gcc.exe`),
-		gpp: path.join(binPath, `${toolExecutablePrefix}g++.exe`),
-		objcopy: path.join(binPath, `${toolExecutablePrefix}objcopy.exe`),
-		objdump: path.join(binPath, `${toolExecutablePrefix}objdump.exe`),
-		size: path.join(binPath, `${toolExecutablePrefix}size.exe`),
+		gcc: path.join(binPath, resolvedToolchain.executables.gcc),
+		gpp: path.join(binPath, resolvedToolchain.executables.gpp),
+		objcopy: path.join(binPath, resolvedToolchain.executables.objcopy),
+		objdump: path.join(binPath, resolvedToolchain.executables.objdump),
+		size: path.join(binPath, resolvedToolchain.executables.size),
 	};
 }
 

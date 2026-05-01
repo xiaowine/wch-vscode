@@ -122,7 +122,7 @@ export async function resolveBuildProjectForExecution(
 		throw new Error('请先配置 wchVscode.mounRiverStudioPath');
 	}
 
-	const toolchainPaths = resolveToolchainPaths(mounRiverStudioPath, model.debug.gdbExecutable);
+	const toolchainPaths = resolveToolchainPaths(mounRiverStudioPath, model);
 	if (!toolchainPaths) {
 		throw new Error('不支持当前工具链版本');
 	}

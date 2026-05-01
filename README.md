@@ -6,11 +6,11 @@ This is the README for your extension "wch-vscode". After writing up a brief des
 
 - Detects WCH MounRiver Studio projects in the current workspace.
 - Generates cpptools configuration from parsed WCH project models.
-- Shows a `$(tools) Build` status bar button for supported RISC-V projects and runs builds through the bundled MRS `make.exe`.
+- Shows `$(trash) Clean`, `$(debug-restart) Clean Build`, and `$(tools) Build` status bar buttons for supported RISC-V projects and runs builds through the bundled MRS `make.exe`.
 
 ## Requirements
 
-Configure `wchVscode.mounRiverStudioPath` before using Build or generated C/C++ toolchain paths.
+Configure `wchVscode.mounRiverStudioPath` before using Build, Clean Build, Clean, or generated C/C++ toolchain paths.
 
 ## Extension Settings
 

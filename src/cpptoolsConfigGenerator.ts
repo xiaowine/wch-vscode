@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { WchProjectModel } from './models/WchProjectModel';
-import { buildMarch, isAbsoluteOrVariablePath, mapProjectVirtualPath, normalizeLinkedFolderLocation, resolveCompilerPathFromSetting } from './build/buildShared';
+import { isAbsoluteOrVariablePath, mapProjectVirtualPath, normalizeLinkedFolderLocation, resolveCompilerPathFromSetting } from './build/buildShared';
 
 export const GENERATE_CPPTOOLS_CONFIG_COMMAND = 'wchVscode.generateCppToolsConfig';
 const CPPTOOLS_CONFIG_FILE_NAME = 'c_cpp_properties.json';
@@ -70,7 +70,7 @@ async function buildCppToolsConfiguration(model: WchProjectModel): Promise<CppTo
 		model.build.includeFiles.map((value) => normalizeWorkspacePath(model, value)),
 	);
 	const compilerArgs = uniqueStrings([
-		...buildArchitectureArgs(model),
+		...model.build.architectureArgs,
 		...model.build.otherCompilerFlags,
 	]);
 	const compilerPath = resolveCompilerPathFromSetting(model);
@@ -89,21 +89,6 @@ async function buildCppToolsConfiguration(model: WchProjectModel): Promise<CppTo
 			limitSymbolsToIncludedHeaders: true,
 		},
 	};
-}
-
-// 为交叉编译器补齐常用架构参数，提升 Intellisense 准确度。
-function buildArchitectureArgs(model: WchProjectModel): string[] {
-	const args: string[] = [];
-
-	if (model.build.targetArchitecture) {
-		args.push(`-march=${buildMarch(model)}`);
-	}
-
-	if (model.build.targetAbi) {
-		args.push(`-mabi=${model.build.targetAbi}`);
-	}
-
-	return args;
 }
 
 // 将项目变量路径转成 cpptools 能直接识别的 workspace 路径。

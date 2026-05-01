@@ -28,7 +28,15 @@
       },
       {
         "command": "wchVscode.buildProject",
-        "title": "Build Project"
+        "title": "Build"
+      },
+      {
+        "command": "wchVscode.cleanProject",
+        "title": "Clean"
+      },
+      {
+        "command": "wchVscode.cleanBuildProject",
+        "title": "Clean and Build"
       }
     ],
     "viewsContainers": {
