@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { buildCurrentProject, BUILD_PROJECT_COMMAND, getCurrentBuildTargetTooltip } from './build/buildProjectTask';
 import { ensureCppToolsConfigFileIfMissing, generateCppToolsConfigFile, GENERATE_CPPTOOLS_CONFIG_COMMAND } from './cpptoolsConfigGenerator';
 import { refreshProjectDetectionViews, registerWorkspaceRefresh } from './projectDetection';
 import { getWchProjectState } from './projectState';
@@ -11,12 +12,21 @@ export function activate(context: vscode.ExtensionContext) {
 	const sidebarProvider = new WchVscodeSidebarProvider();
 	const projectFilesProvider = new WchProjectFilesProvider();
 	const providers = [sidebarProvider, projectFilesProvider];
-	registerWorkspaceRefresh(providers, context);
+	const buildStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, -100);
+	buildStatusBarItem.text = '$(tools) Build';
+	buildStatusBarItem.command = BUILD_PROJECT_COMMAND;
+	buildStatusBarItem.name = 'WCH Build';
+	registerWorkspaceRefresh(providers, context, () => updateBuildStatusBarItem(buildStatusBarItem));
 	// 扩展激活时先做一次项目检测，并在缺少 cpptools 配置时自动补齐。
-	void initializeProjectState(providers);
+	void initializeProjectState(providers, buildStatusBarItem);
 	// 注册侧栏刷新命令，供标题栏按钮触发重新检测和解析。
 	const refreshProjectsCommand = vscode.commands.registerCommand('wchVscode.refreshProjects', async () => {
 		await refreshProjectDetectionViews(providers);
+		updateBuildStatusBarItem(buildStatusBarItem);
+	});
+	const buildProjectCommand = vscode.commands.registerCommand(BUILD_PROJECT_COMMAND, async () => {
+		await buildCurrentProject();
+		updateBuildStatusBarItem(buildStatusBarItem);
 	});
 	// 注册侧栏复制命令，点击叶子节点时将对应值写入剪贴板。
 	const copySidebarValueCommand = vscode.commands.registerCommand(COPY_SIDEBAR_VALUE_COMMAND, async (label: string, value: string) => {
@@ -35,11 +45,14 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 
 	context.subscriptions.push(
+		buildProjectCommand,
+		buildStatusBarItem,
 		copySidebarValueCommand,
 		generateCppToolsConfigCommand,
 		refreshProjectsCommand,
 		vscode.window.registerTreeDataProvider('wchVscodeSidebarView', sidebarProvider),
 		vscode.window.registerTreeDataProvider('wchVscodeProjectFilesView', projectFilesProvider),
+		vscode.window.onDidChangeActiveTextEditor(() => updateBuildStatusBarItem(buildStatusBarItem)),
 	);
 }
 
@@ -48,6 +61,7 @@ export function deactivate() {}
 // 初始化项目状态，并为命中的工作区自动生成缺失的 cpptools 配置文件。
 async function initializeProjectState(
 	providers: Array<{ setResults(): void }>,
+	buildStatusBarItem: vscode.StatusBarItem,
 ): Promise<void> {
 	await refreshProjectDetectionViews(providers);
 
@@ -62,4 +76,11 @@ async function initializeProjectState(
 
 		await ensureCppToolsConfigFileIfMissing(folder, project.models);
 	}
+
+	updateBuildStatusBarItem(buildStatusBarItem);
+}
+
+function updateBuildStatusBarItem(buildStatusBarItem: vscode.StatusBarItem): void {
+	buildStatusBarItem.tooltip = getCurrentBuildTargetTooltip();
+	buildStatusBarItem.show();
 }

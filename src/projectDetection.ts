@@ -57,22 +57,27 @@ export async function refreshWchProjectState(): Promise<void> {
 export function registerWorkspaceRefresh(
 	providers: RefreshableTreeProvider[],
 	context: vscode.ExtensionContext,
+	afterRefresh?: () => void | Promise<void>,
 ): void {
 	const watchers = [
 		vscode.workspace.createFileSystemWatcher('**/.cproject'),
 		vscode.workspace.createFileSystemWatcher('**/*.launch'),
 		vscode.workspace.createFileSystemWatcher('**/*.wvproj'),
 	];
+	const refresh = async () => {
+		await refreshProjectDetectionViews(providers);
+		await afterRefresh?.();
+	};
 
 	for (const watcher of watchers) {
-		watcher.onDidCreate(() => void refreshProjectDetectionViews(providers));
-		watcher.onDidDelete(() => void refreshProjectDetectionViews(providers));
-		watcher.onDidChange(() => void refreshProjectDetectionViews(providers));
+		watcher.onDidCreate(() => void refresh());
+		watcher.onDidDelete(() => void refresh());
+		watcher.onDidChange(() => void refresh());
 		context.subscriptions.push(watcher);
 	}
 
 	context.subscriptions.push(
-		vscode.workspace.onDidChangeWorkspaceFolders(() => void refreshProjectDetectionViews(providers)),
+		vscode.workspace.onDidChangeWorkspaceFolders(() => void refresh()),
 	);
 }
 

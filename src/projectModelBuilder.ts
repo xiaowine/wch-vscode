@@ -46,12 +46,25 @@ function buildWchProjectModel(project: ParsedWchProject, pair: ParsedProjectPair
 	const cIncludes = asRecord(ccompiler?.includes);
 	const cPreprocessor = asRecord(ccompiler?.preprocessor);
 	const cCompilerOptimization = asRecord(ccompiler?.optimization);
+	const cCompilerWarnings = asRecord(ccompiler?.warnings);
 	const cCompilerMisc = asRecord(ccompiler?.miscellaneous);
+	const assembler = asRecord(buildConfiguration?.assembler);
+	const assemblerPreprocessor = asRecord(assembler?.preprocessor);
+	const assemblerIncludes = asRecord(assembler?.includes);
+	const assemblerMisc = asRecord(assembler?.miscellaneous);
 	const cppcompiler = asRecord(buildConfiguration?.cppcompiler);
+	const cppIncludes = asRecord(cppcompiler?.includes);
+	const cppPreprocessor = asRecord(cppcompiler?.preprocessor);
 	const cppCompilerOptimization = asRecord(cppcompiler?.optimization);
-	const cLinker = asRecord(buildConfiguration?.clinker);
-	const cLinkerGeneral = asRecord(cLinker?.general);
-	const cLinkerLibraries = asRecord(cLinker?.libraries);
+	const cppCompilerWarnings = asRecord(cppcompiler?.warnings);
+	const cppCompilerMisc = asRecord(cppcompiler?.miscellaneous);
+	const linker = asRecord(buildConfiguration?.clinker) ?? asRecord(buildConfiguration?.cpplinker);
+	const linkerGeneral = asRecord(linker?.general);
+	const linkerLibraries = asRecord(linker?.libraries);
+	const linkerMisc = asRecord(linker?.miscellaneous);
+	const createFlash = asRecord(buildConfiguration?.createFlash);
+	const createList = asRecord(buildConfiguration?.createList);
+	const printSize = asRecord(buildConfiguration?.printSize);
 	const optimization = asRecord(buildConfiguration?.optimization);
 	const riscvTarget = asRecord(buildConfiguration?.riscvTargetProcessor);
 	const debugConfigurations = asRecord(wvproj.debugConfigurations);
@@ -61,6 +74,46 @@ function buildWchProjectModel(project: ParsedWchProject, pair: ParsedProjectPair
 	const runCommands = asRecord(startup?.runCommands);
 	const initCommands = asRecord(startup?.initCommands);
 	const flashConfig = asRecord(wvproj.flashConfig);
+	const targetArchitecture = cprojectInfo.targetArchitecture || getString(riscvTarget?.architecture) || '';
+	const targetAbi = cprojectInfo.targetAbi || getString(riscvTarget?.integer_ABI) || '';
+	const riscvExtensions = collectRiscvExtensions(riscvTarget);
+	const optimizationLevel = getString(optimization?.level) ?? '';
+	const functionSections = getBoolean(optimization?.function_sections) ?? false;
+	const dataSections = getBoolean(optimization?.data_sections) ?? false;
+	const architectureArgs = buildArchitectureArgs(targetArchitecture, targetAbi, riscvExtensions);
+	const buildOtherCompilerFlags = splitSpaceFlags(getString(cCompilerMisc?.other_compiler_flags));
+	const linkerFlags = getStringArray(linkerMisc?.linker_flags);
+	const otherLinkerFlags = splitSpaceFlags(getString(linkerMisc?.other_linker_flags));
+	const linkerConfig = {
+		doNotUseStandardStartFiles: getBoolean(linkerGeneral?.do_not_use_standard_start_files) ?? false,
+		doNotUseDefaultLibraries: getBoolean(linkerGeneral?.do_not_use_default_libraries) ?? false,
+		noStartupOrDefaultLibs: getBoolean(linkerGeneral?.no_startup_or_default_libs) ?? false,
+		removeUnusedSections: getBoolean(linkerGeneral?.remove_unused_sections) ?? false,
+		printRemovedSections: getBoolean(linkerGeneral?.print_removed_sections) ?? false,
+		omitAllSymbolInformation: getBoolean(linkerGeneral?.omit_all_symbol_information) ?? false,
+		useNewlibNano: getBoolean(linkerMisc?.use_newlib_nano) ?? false,
+		useFloatWithNanoPrintf: getBoolean(linkerMisc?.use_float_with_nano_printf) ?? false,
+		useFloatWithNanoScanf: getBoolean(linkerMisc?.use_float_with_nano_scanf) ?? false,
+		doNotUseSyscalls: getBoolean(linkerMisc?.do_not_use_syscalls) ?? false,
+	};
+	const cStandard = normalizeCStandard(getString(cCompilerOptimization?.language_standard));
+	const cppStandard = normalizeCppStandard(getString(cppCompilerOptimization?.cpp_language_standard));
+	const cOptimizationFlags = splitSpaceFlags(getString(cCompilerOptimization?.other_optimization_flags));
+	const cWarningFlags = splitSpaceFlags(getString(cCompilerWarnings?.other_warning_flags));
+	const cOtherCompilerFlags = splitSpaceFlags(getString(cCompilerMisc?.other_compiler_flags));
+	const cppOptimizationFlags = splitSpaceFlags(getString(cppCompilerOptimization?.other_optimization_flags));
+	const cppWarningFlags = splitSpaceFlags(getString(cppCompilerWarnings?.other_warning_flags));
+	const cppOtherCompilerFlags = splitSpaceFlags(getString(cppCompilerMisc?.other_compiler_flags));
+	const assemblerWarningFlags = splitSpaceFlags(getString(assembler?.other_warning_flags));
+	const assemblerOtherFlags = splitSpaceFlags(getString(assemblerMisc?.other_assembler_flags));
+	const createFlashEnabled = getBoolean(createFlash?.enabled) ?? false;
+	const flashOutputFormat = getString(createFlash?.outputFileFormat) ?? '';
+	const flashFlags = splitSpaceFlags(getString(createFlash?.other_flags));
+	const createListEnabled = getBoolean(createList?.enabled) ?? false;
+	const listFlags = splitSpaceFlags(getString(createList?.other_flags));
+	const printSizeEnabled = getBoolean(printSize?.enabled) ?? false;
+	const sizeFormat = getString(printSize?.size_format) ?? '';
+	const sizeFlags = splitSpaceFlags(getString(printSize?.other_flags));
 
 	return {
 		baseName: pair.baseName,
@@ -102,23 +155,150 @@ function buildWchProjectModel(project: ParsedWchProject, pair: ParsedProjectPair
 			toolchainName: cprojectInfo.toolchainName,
 			commandPrefix: cprojectInfo.commandPrefix,
 			compilerPath: buildCompilerPath(cprojectInfo.commandPrefix),
-			targetArchitecture: cprojectInfo.targetArchitecture || getString(riscvTarget?.architecture) || '',
-			targetAbi: cprojectInfo.targetAbi || getString(riscvTarget?.integer_ABI) || '',
-			riscvExtensions: collectRiscvExtensions(riscvTarget),
-			optimizationLevel: getString(optimization?.level) ?? '',
-			cStandard: normalizeCStandard(getString(cCompilerOptimization?.language_standard)),
-			cppStandard: normalizeCppStandard(getString(cppCompilerOptimization?.cpp_language_standard)),
+			targetArchitecture,
+			targetAbi,
+			riscvExtensions,
+			architectureArgs,
+			optimizationLevel,
+			functionSections,
+			dataSections,
+			cStandard,
+			cppStandard,
 			includePaths: getStringArray(cIncludes?.include_paths),
 			includeSystemPaths: getStringArray(cIncludes?.include_system_paths),
 			includeFiles: getStringArray(cIncludes?.include_files),
 			definedSymbols: getStringArray(cPreprocessor?.defined_symbols),
-			otherCompilerFlags: splitSpaceFlags(getString(cCompilerMisc?.other_compiler_flags)),
-			linkerScript: getFirstString(cLinkerGeneral?.scriptFiles),
-			libraries: getStringArray(cLinkerLibraries?.libraries),
-			librarySearchPaths: getStringArray(cLinkerLibraries?.library_search_path),
+			otherCompilerFlags: buildOtherCompilerFlags,
+			linkerScript: getFirstString(linkerGeneral?.scriptFiles),
+			libraries: getStringArray(linkerLibraries?.libraries),
+			librarySearchPaths: getStringArray(linkerLibraries?.library_search_path),
 			sourceExcludes: cprojectInfo.sourceExcludes.length > 0
 				? cprojectInfo.sourceExcludes
 				: getStringArray(buildConfiguration?.excludeResources),
+		},
+		assembler: {
+			includePaths: getStringArray(assemblerIncludes?.include_paths),
+			includeSystemPaths: getStringArray(assemblerIncludes?.include_system_paths),
+			includeFiles: getStringArray(assemblerIncludes?.include_files),
+			definedSymbols: getStringArray(assemblerPreprocessor?.defined_symbols),
+			otherAssemblerFlags: assemblerOtherFlags,
+			warningFlags: assemblerWarningFlags,
+			args: uniqueStrings([
+				...architectureArgs,
+				'-x',
+				'assembler-with-cpp',
+				...assemblerWarningFlags,
+				...assemblerOtherFlags,
+			]),
+		},
+		c: {
+			standard: cStandard,
+			includePaths: getStringArray(cIncludes?.include_paths),
+			includeSystemPaths: getStringArray(cIncludes?.include_system_paths),
+			includeFiles: getStringArray(cIncludes?.include_files),
+			definedSymbols: getStringArray(cPreprocessor?.defined_symbols),
+			optimizationFlags: cOptimizationFlags,
+			warningFlags: cWarningFlags,
+			otherCompilerFlags: cOtherCompilerFlags,
+			args: uniqueStrings([
+				...architectureArgs,
+				...buildCommonCompilerArgs(optimizationLevel, functionSections, dataSections),
+				...(cStandard ? [`-std=${cStandard}`] : []),
+				...cOptimizationFlags,
+				...cWarningFlags,
+				...buildOtherCompilerFlags,
+				...cOtherCompilerFlags,
+			]),
+		},
+		cpp: {
+			standard: cppStandard,
+			includePaths: getStringArray(cppIncludes?.include_paths),
+			includeSystemPaths: getStringArray(cppIncludes?.include_system_paths),
+			includeFiles: getStringArray(cppIncludes?.include_files),
+			definedSymbols: getStringArray(cppPreprocessor?.defined_symbols),
+			optimizationFlags: cppOptimizationFlags,
+			warningFlags: cppWarningFlags,
+			otherCompilerFlags: cppOtherCompilerFlags,
+			args: uniqueStrings([
+				...architectureArgs,
+				...buildCommonCompilerArgs(optimizationLevel, functionSections, dataSections),
+				...(cppStandard ? [`-std=${cppStandard}`] : []),
+				...cppOptimizationFlags,
+				...cppWarningFlags,
+				...buildOtherCompilerFlags,
+				...cppOtherCompilerFlags,
+			]),
+		},
+		linker: {
+			linkerScript: getFirstString(linkerGeneral?.scriptFiles),
+			libraries: getStringArray(linkerLibraries?.libraries),
+			librarySearchPaths: getStringArray(linkerLibraries?.library_search_path),
+			linkerFlags,
+			otherLinkerFlags,
+			otherObjects: getStringArray(linkerMisc?.other_objects),
+			generateMap: getString(linkerMisc?.generate_map) ?? '',
+			doNotUseStandardStartFiles: linkerConfig.doNotUseStandardStartFiles,
+			doNotUseDefaultLibraries: linkerConfig.doNotUseDefaultLibraries,
+			noStartupOrDefaultLibs: linkerConfig.noStartupOrDefaultLibs,
+			removeUnusedSections: linkerConfig.removeUnusedSections,
+			printRemovedSections: linkerConfig.printRemovedSections,
+			omitAllSymbolInformation: linkerConfig.omitAllSymbolInformation,
+			useNewlibNano: linkerConfig.useNewlibNano,
+			useFloatWithNanoPrintf: linkerConfig.useFloatWithNanoPrintf,
+			useFloatWithNanoScanf: linkerConfig.useFloatWithNanoScanf,
+			doNotUseSyscalls: linkerConfig.doNotUseSyscalls,
+			args: uniqueStrings([
+				...architectureArgs,
+				...buildLinkBehaviorArgs(linkerConfig),
+				...linkerFlags,
+				...otherLinkerFlags,
+			]),
+		},
+		postBuild: {
+			createFlash: createFlashEnabled,
+			flashOutputFormat,
+			flashFlags,
+			flashArgs: buildFlashArgs(flashOutputFormat, flashFlags),
+			createList: createListEnabled,
+			listFlags,
+			listArgs: buildListArgs(
+				getBoolean(createList?.display_all_headers) ?? false,
+				getBoolean(createList?.disassemble) ?? false,
+				getBoolean(createList?.display_source) ?? false,
+				getBoolean(createList?.demangle_names) ?? false,
+				getBoolean(createList?.display_debug_info) ?? false,
+				getBoolean(createList?.display_file_headers) ?? false,
+				getBoolean(createList?.display_line_numbers) ?? false,
+				getBoolean(createList?.display_relocation_info) ?? false,
+				getBoolean(createList?.display_symbols) ?? false,
+				getBoolean(createList?.wide_lines) ?? false,
+				listFlags,
+			),
+			listOptions: {
+				displaySource: getBoolean(createList?.display_source) ?? false,
+				displayAllHeaders: getBoolean(createList?.display_all_headers) ?? false,
+				demangleNames: getBoolean(createList?.demangle_names) ?? false,
+				displayDebugInfo: getBoolean(createList?.display_debug_info) ?? false,
+				disassemble: getBoolean(createList?.disassemble) ?? false,
+				displayFileHeaders: getBoolean(createList?.display_file_headers) ?? false,
+				displayLineNumbers: getBoolean(createList?.display_line_numbers) ?? false,
+				displayRelocationInfo: getBoolean(createList?.display_relocation_info) ?? false,
+				displaySymbols: getBoolean(createList?.display_symbols) ?? false,
+				wideLines: getBoolean(createList?.wide_lines) ?? false,
+			},
+			printSize: printSizeEnabled,
+			sizeFormat,
+			sizeFlags,
+			sizeArgs: buildSizeArgs(
+				sizeFormat,
+				getBoolean(printSize?.hex) ?? false,
+				getBoolean(printSize?.show_totals) ?? false,
+				sizeFlags,
+			),
+			sizeOptions: {
+				hex: getBoolean(printSize?.hex) ?? false,
+				showTotals: getBoolean(printSize?.show_totals) ?? false,
+			},
 		},
 		debug: {
 			programName: getString(launchAttributes.strings.get('org.eclipse.cdt.launch.PROGRAM_NAME'))
@@ -318,6 +498,203 @@ function normalizeCppStandard(value: string | null): string {
 	return value;
 }
 
+function buildArchitectureArgs(
+	targetArchitecture: string,
+	targetAbi: string,
+	riscvExtensions: string[],
+): string[] {
+	const args: string[] = [];
+
+	if (targetArchitecture) {
+		args.push(`-march=${buildMarch(targetArchitecture, riscvExtensions)}`);
+	}
+
+	if (targetAbi) {
+		args.push(`-mabi=${targetAbi}`);
+	}
+
+	return args;
+}
+
+function buildMarch(targetArchitecture: string, riscvExtensions: string[]): string {
+	const extensions = riscvExtensions
+		.map((item) => item.toLowerCase())
+		.filter((item) => item !== 'zmmul');
+	const suffix = extensions.join('');
+	const base = targetArchitecture || 'rv32i';
+
+	if (riscvExtensions.includes('Zmmul')) {
+		return suffix ? `${base}${suffix}_zmmul` : `${base}_zmmul`;
+	}
+
+	return `${base}${suffix}`;
+}
+
+function buildCommonCompilerArgs(
+	optimizationLevel: string,
+	functionSections: boolean,
+	dataSections: boolean,
+): string[] {
+	return uniqueStrings([
+		...buildOptimizationLevelArgs(optimizationLevel),
+		...(functionSections ? ['-ffunction-sections'] : []),
+		...(dataSections ? ['-fdata-sections'] : []),
+	]);
+}
+
+function buildOptimizationLevelArgs(level: string): string[] {
+	switch (level.toLowerCase()) {
+		case '':
+			return [];
+		case 'none':
+			return ['-O0'];
+		case 'debug':
+			return ['-Og'];
+		case 'size':
+			return ['-Os'];
+		case 'more':
+		case 'speed':
+			return ['-O2'];
+		case 'most':
+			return ['-O3'];
+		default:
+			return level.startsWith('-O') ? [level] : [];
+	}
+}
+
+function buildLinkBehaviorArgs(config: {
+	doNotUseStandardStartFiles: boolean;
+	doNotUseDefaultLibraries: boolean;
+	noStartupOrDefaultLibs: boolean;
+	removeUnusedSections: boolean;
+	printRemovedSections: boolean;
+	omitAllSymbolInformation: boolean;
+	useNewlibNano: boolean;
+	useFloatWithNanoPrintf: boolean;
+	useFloatWithNanoScanf: boolean;
+	doNotUseSyscalls: boolean;
+}): string[] {
+	const flags: string[] = [];
+
+	if (config.noStartupOrDefaultLibs) {
+		flags.push('-nostdlib');
+	} else {
+		if (config.doNotUseStandardStartFiles) {
+			flags.push('-nostartfiles');
+		}
+		if (config.doNotUseDefaultLibraries) {
+			flags.push('-nodefaultlibs');
+		}
+	}
+
+	if (config.removeUnusedSections) {
+		flags.push('-Wl,--gc-sections');
+	}
+	if (config.printRemovedSections) {
+		flags.push('-Wl,--print-gc-sections');
+	}
+	if (config.omitAllSymbolInformation) {
+		flags.push('-Wl,-s');
+	}
+	if (config.useNewlibNano) {
+		flags.push('--specs=nano.specs');
+	}
+	if (config.doNotUseSyscalls) {
+		flags.push('--specs=nosys.specs');
+	}
+	if (config.useFloatWithNanoPrintf) {
+		flags.push('-u', '_printf_float');
+	}
+	if (config.useFloatWithNanoScanf) {
+		flags.push('-u', '_scanf_float');
+	}
+
+	return flags;
+}
+
+function buildFlashArgs(outputFormat: string, flashFlags: string[]): string[] {
+	const format = (outputFormat || 'ihex').toLowerCase();
+	return ['-O', format === 'ihex' ? 'ihex' : format, ...flashFlags];
+}
+
+function buildListArgs(
+	displayAllHeaders: boolean,
+	disassemble: boolean,
+	displaySource: boolean,
+	demangleNames: boolean,
+	displayDebugInfo: boolean,
+	displayFileHeaders: boolean,
+	displayLineNumbers: boolean,
+	displayRelocationInfo: boolean,
+	displaySymbols: boolean,
+	wideLines: boolean,
+	listFlags: string[],
+): string[] {
+	const flags: string[] = [];
+	if (displayAllHeaders) {
+		flags.push('-x');
+	}
+	if (disassemble) {
+		flags.push('-d');
+	}
+	if (displaySource) {
+		flags.push('-S');
+	}
+	if (demangleNames) {
+		flags.push('-C');
+	}
+	if (displayDebugInfo) {
+		flags.push('-g');
+	}
+	if (displayFileHeaders) {
+		flags.push('-f');
+	}
+	if (displayLineNumbers) {
+		flags.push('-l');
+	}
+	if (displayRelocationInfo) {
+		flags.push('-r');
+	}
+	if (displaySymbols) {
+		flags.push('-t');
+	}
+	if (wideLines) {
+		flags.push('-w');
+	}
+
+	return uniqueStrings([...flags, ...listFlags]);
+}
+
+function buildSizeArgs(
+	sizeFormat: string,
+	hex: boolean,
+	showTotals: boolean,
+	sizeFlags: string[],
+): string[] {
+	const flags: string[] = [];
+
+	switch (sizeFormat.toLowerCase()) {
+		case 'sysv':
+			flags.push('--format=sysv');
+			break;
+		case 'gnu':
+			flags.push('--format=gnu');
+			break;
+		default:
+			flags.push('--format=berkeley');
+			break;
+	}
+
+	if (hex) {
+		flags.push('--radix=16');
+	}
+	if (showTotals) {
+		flags.push('--totals');
+	}
+
+	return uniqueStrings([...flags, ...sizeFlags]);
+}
+
 function getOptionValue(options: Record<string, unknown>[], superClassSuffix: string): string | null {
 	const option = options.find((item) => getString(item['@_superClass'])?.includes(superClassSuffix));
 	return getString(option?.['@_value']);
@@ -374,6 +751,10 @@ function getStringArray(value: unknown): string[] {
 	return asArray(value)
 		.map((item) => getString(item))
 		.filter((item): item is string => item !== null && item.length > 0);
+}
+
+function uniqueStrings(values: string[]): string[] {
+	return Array.from(new Set(values.filter((value) => value.length > 0)));
 }
 
 // 从 .wvproj 的 linkedFolders 中提取有效目录路径。

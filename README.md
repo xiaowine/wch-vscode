@@ -4,28 +4,19 @@ This is the README for your extension "wch-vscode". After writing up a brief des
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+- Detects WCH MounRiver Studio projects in the current workspace.
+- Generates cpptools configuration from parsed WCH project models.
+- Shows a `$(tools) Build` status bar button for supported RISC-V projects and runs builds through the bundled MRS `make.exe`.
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+Configure `wchVscode.mounRiverStudioPath` before using Build or generated C/C++ toolchain paths.
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
 This extension contributes the following settings:
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+* `wchVscode.mounRiverStudioPath`: MounRiver Studio 安装根目录。扩展会基于这个路径解析 WCH 工具链和固定位置的 `make.exe`。
 
 ## Known Issues
 

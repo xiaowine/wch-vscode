@@ -1,10 +1,9 @@
 import * as vscode from 'vscode';
-import * as path from 'node:path';
-import type { WchLinkedFolder, WchProjectModel } from './models/WchProjectModel';
+import type { WchProjectModel } from './models/WchProjectModel';
+import { buildMarch, isAbsoluteOrVariablePath, mapProjectVirtualPath, normalizeLinkedFolderLocation, resolveCompilerPathFromSetting } from './build/buildShared';
 
 export const GENERATE_CPPTOOLS_CONFIG_COMMAND = 'wchVscode.generateCppToolsConfig';
 const CPPTOOLS_CONFIG_FILE_NAME = 'c_cpp_properties.json';
-const MOUN_RIVER_STUDIO_PATH_SETTING = 'mounRiverStudioPath';
 
 type CppToolsConfiguration = {
 	name: string;
@@ -107,21 +106,6 @@ function buildArchitectureArgs(model: WchProjectModel): string[] {
 	return args;
 }
 
-// 根据基础架构和扩展组合出 RISC-V march 参数。
-function buildMarch(model: WchProjectModel): string {
-	const extensions = model.build.riscvExtensions
-		.map((item) => item.toLowerCase())
-		.filter((item) => item !== 'zmmul');
-	const suffix = extensions.join('');
-	const base = model.build.targetArchitecture || 'rv32i';
-
-	if (model.build.riscvExtensions.includes('Zmmul')) {
-		return suffix ? `${base}${suffix}_zmmul` : `${base}_zmmul`;
-	}
-
-	return `${base}${suffix}`;
-}
-
 // 将项目变量路径转成 cpptools 能直接识别的 workspace 路径。
 function normalizeWorkspacePath(model: WchProjectModel, value: string): string {
 	const normalizedValue = value
@@ -150,97 +134,6 @@ function appendRecursiveGlob(value: string): string {
 	}
 
 	return `${value.replace(/\/+$/g, '')}/**`;
-}
-
-// linkedFolders 的 location 本身就是实际物理目录，生成 cpptools 时直接按工作区相对路径展开。
-function normalizeLinkedFolderLocation(value: string): string {
-	const normalizedValue = value.replace(/\\/g, '/');
-	if (isAbsoluteOrVariablePath(normalizedValue)) {
-		return normalizedValue;
-	}
-
-	return `\${workspaceFolder}/${normalizedValue.replace(/^\/+/g, '')}`;
-}
-
-// 将 ${project}/逻辑目录映射到 linkedFolders 指向的真实目录。
-function mapProjectVirtualPath(linkedFolders: WchLinkedFolder[], value: string): string | null {
-	if (!value.startsWith('${project}/')) {
-		return null;
-	}
-
-	const relativePath = value.slice('${project}/'.length);
-	for (const linkedFolder of linkedFolders) {
-		const folderName = linkedFolder.name.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-		if (!folderName) {
-			continue;
-		}
-
-		if (relativePath === folderName || relativePath.startsWith(`${folderName}/`)) {
-			const suffix = relativePath.slice(folderName.length).replace(/^\/+/g, '');
-			const basePath = normalizeLinkedFolderLocation(linkedFolder.location).replace(/\/+$/g, '');
-			return suffix ? `${basePath}/${suffix}` : basePath;
-		}
-	}
-
-	return null;
-}
-
-function isAbsoluteOrVariablePath(value: string): boolean {
-	return /^[A-Za-z]:\//.test(value)
-		|| value.startsWith('//')
-		|| value.startsWith('/')
-		|| value.startsWith('${');
-}
-
-// 从扩展设置读取 MounRiver Studio 根目录，并按工程声明的工具链版本拼接 gcc 路径。
-function resolveCompilerPathFromSetting(model: WchProjectModel): string | undefined {
-	const rootPath = vscode.workspace
-		.getConfiguration('wchVscode')
-		.get<string>(MOUN_RIVER_STUDIO_PATH_SETTING, '')
-		.trim();
-
-	if (!rootPath) {
-		return undefined;
-	}
-
-	const toolchainDirectoryName = resolveToolchainDirectoryName(model.debug.gdbExecutable);
-	if (!toolchainDirectoryName) {
-		return undefined;
-	}
-
-	return path.join(
-		rootPath,
-		'resources',
-		'app',
-		'resources',
-		'win32',
-		'components',
-		'WCH',
-		'Toolchain',
-		toolchainDirectoryName,
-		'bin',
-		'riscv-none-embed-gcc.exe',
-	);
-}
-
-// 从 ${WCH:Toolchain:GCC*} 占位符解析对应的工具链目录名。
-function resolveToolchainDirectoryName(gdbExecutable: string): string | undefined {
-	const matchedToolchainName = /\$\{WCH:Toolchain:([^}]+)\}/.exec(gdbExecutable)?.[1]?.trim();
-	if (!matchedToolchainName) {
-		return undefined;
-	}
-
-	switch (matchedToolchainName.toUpperCase()) {
-		case 'GCC':
-		case 'GCC8':
-			return 'RISC-V Embedded GCC';
-		case 'GCC12':
-			return 'RISC-V Embedded GCC12';
-		case 'GCC15':
-			return 'RISC-V Embedded GCC15';
-		default:
-			return undefined;
-	}
 }
 
 function uniqueStrings(values: string[]): string[] {
