@@ -1,0 +1,1 @@
+After code changes, run the existing project checks from package.json: `pnpm run compile` and `pnpm run lint`. Run `pnpm run test` when behavior changes are broad enough to warrant extension test coverage. Keep edits surgical, avoid unrelated cleanup, and preserve existing VS Code extension patterns in src/extension.ts and sidebar/build modules.

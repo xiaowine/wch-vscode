@@ -6,7 +6,7 @@ This is the README for your extension "wch-vscode". After writing up a brief des
 
 - Detects WCH MounRiver Studio projects in the current workspace.
 - Generates cpptools configuration from parsed WCH project models.
-- Shows `$(trash) Clean`, `$(debug-restart) Clean Build`, and `$(tools) Build` status bar buttons for supported RISC-V projects and runs builds through the bundled MRS `make.exe`.
+- Shows the current project name plus MCU model, alongside `$(trash) Clean`, `$(debug-restart) Clean Build`, and `$(tools) Build` status bar entries for supported RISC-V projects.
 
 ## Requirements
 

@@ -18,6 +18,7 @@ import {
   registerWorkspaceRefresh,
 } from "./projectDetection";
 import { getWchProjectState } from "./projectState";
+import { resolveCurrentBuildTarget } from "./build/buildProjectResolver";
 import {
   COPY_SIDEBAR_VALUE_COMMAND,
   WchVscodeSidebarProvider,
@@ -30,6 +31,11 @@ export function activate(context: vscode.ExtensionContext) {
   const sidebarProvider = new WchVscodeSidebarProvider();
   const projectFilesProvider = new WchProjectFilesProvider();
   const providers = [sidebarProvider, projectFilesProvider];
+  const targetInfoStatusBarItem = createStatusBarItem(
+    "WCH",
+    "WCH Target",
+    -99,
+  );
   const cleanStatusBarItem = createBuildStatusBarItem(
     "$(trash) Clean",
     CLEAN_PROJECT_COMMAND,
@@ -50,6 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
   registerWorkspaceRefresh(providers, context, () =>
     updateBuildStatusBarItems(
+      targetInfoStatusBarItem,
       cleanStatusBarItem,
       cleanBuildStatusBarItem,
       buildStatusBarItem,
@@ -58,6 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
   // 扩展激活时先做一次项目检测，并在缺少 cpptools 配置时自动补齐。
   void initializeProjectState(
     providers,
+    targetInfoStatusBarItem,
     cleanStatusBarItem,
     buildStatusBarItem,
     cleanBuildStatusBarItem,
@@ -68,6 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
     async () => {
       await refreshProjectDetectionViews(providers);
       updateBuildStatusBarItems(
+        targetInfoStatusBarItem,
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
@@ -79,6 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
     async () => {
       await buildCurrentProject();
       updateBuildStatusBarItems(
+        targetInfoStatusBarItem,
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
@@ -90,6 +100,7 @@ export function activate(context: vscode.ExtensionContext) {
     async () => {
       await cleanCurrentProject();
       updateBuildStatusBarItems(
+        targetInfoStatusBarItem,
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
@@ -101,6 +112,7 @@ export function activate(context: vscode.ExtensionContext) {
     async () => {
       await cleanBuildCurrentProject();
       updateBuildStatusBarItems(
+        targetInfoStatusBarItem,
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
@@ -130,6 +142,7 @@ export function activate(context: vscode.ExtensionContext) {
     buildProjectCommand,
     cleanProjectCommand,
     cleanBuildProjectCommand,
+    targetInfoStatusBarItem,
     cleanStatusBarItem,
     buildStatusBarItem,
     cleanBuildStatusBarItem,
@@ -146,6 +159,7 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.window.onDidChangeActiveTextEditor(() =>
       updateBuildStatusBarItems(
+        targetInfoStatusBarItem,
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
@@ -159,6 +173,7 @@ export function deactivate() {}
 // 初始化项目状态，并为命中的工作区自动生成缺失的 cpptools 配置文件。
 async function initializeProjectState(
   providers: Array<{ setResults(): void }>,
+  targetInfoStatusBarItem: vscode.StatusBarItem,
   cleanStatusBarItem: vscode.StatusBarItem,
   buildStatusBarItem: vscode.StatusBarItem,
   cleanBuildStatusBarItem: vscode.StatusBarItem,
@@ -178,17 +193,18 @@ async function initializeProjectState(
   }
 
   updateBuildStatusBarItems(
+    targetInfoStatusBarItem,
     cleanStatusBarItem,
     cleanBuildStatusBarItem,
     buildStatusBarItem,
   );
 }
 
-function createBuildStatusBarItem(
+function createStatusBarItem(
   text: string,
-  command: string,
   name: string,
   priority: number,
+  command?: string,
 ): vscode.StatusBarItem {
   const item = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
@@ -200,11 +216,22 @@ function createBuildStatusBarItem(
   return item;
 }
 
+function createBuildStatusBarItem(
+  text: string,
+  command: string,
+  name: string,
+  priority: number,
+): vscode.StatusBarItem {
+  return createStatusBarItem(text, name, priority, command);
+}
+
 function updateBuildStatusBarItems(
+  targetInfoStatusBarItem: vscode.StatusBarItem,
   cleanStatusBarItem: vscode.StatusBarItem,
   cleanBuildStatusBarItem: vscode.StatusBarItem,
   buildStatusBarItem: vscode.StatusBarItem,
 ): void {
+  updateTargetInfoStatusBarItem(targetInfoStatusBarItem);
   cleanStatusBarItem.tooltip = getCurrentBuildTargetTooltip(undefined, "Clean");
   cleanStatusBarItem.show();
   cleanBuildStatusBarItem.tooltip = getCurrentBuildTargetTooltip(
@@ -214,4 +241,21 @@ function updateBuildStatusBarItems(
   cleanBuildStatusBarItem.show();
   buildStatusBarItem.tooltip = getCurrentBuildTargetTooltip(undefined, "Build");
   buildStatusBarItem.show();
+}
+
+function updateTargetInfoStatusBarItem(
+  targetInfoStatusBarItem: vscode.StatusBarItem,
+): void {
+  const resolution = resolveCurrentBuildTarget();
+  if (!resolution.target) {
+    targetInfoStatusBarItem.hide();
+    return;
+  }
+
+  const { model } = resolution.target;
+  const projectName = model.project.name || model.baseName;
+  const mcuName = model.chip.mcu || model.chip.series || model.project.architecture;
+  targetInfoStatusBarItem.text = `${projectName} · ${mcuName}`;
+  targetInfoStatusBarItem.tooltip = `${projectName}\nMCU: ${mcuName}`;
+  targetInfoStatusBarItem.show();
 }
