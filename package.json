@@ -1,0 +1,96 @@
+{
+  "name": "wch-vscode",
+  "displayName": "wch-vscode",
+  "description": "",
+  "version": "0.0.1",
+  "extensionDependencies": [
+    "ms-vscode.cpptools"
+  ],
+  "engines": {
+    "vscode": "^1.118.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "wchVscode.refreshProjects",
+        "title": "Refresh Projects",
+        "icon": {
+          "light": "media/refresh.svg",
+          "dark": "media/refresh.svg"
+        }
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "wchVscodeSidebar",
+          "title": "wch-vscode",
+          "icon": "media/wch-vscode-sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "wchVscodeProjectFilesView",
+          "name": "WCH Files"
+        }
+      ],
+      "wchVscodeSidebar": [
+        {
+          "id": "wchVscodeSidebarView",
+          "name": "Overview"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "wch-vscode",
+      "properties": {
+        "wchVscode.mounRiverStudioPath": {
+          "type": "string",
+          "default": "",
+          "description": "MounRiver Studio 安装根目录，例如 F:\\MounRiver\\MounRiver_Studio2。生成 C/C++ 配置时会自动拼接出 resources\\app\\resources\\win32\\components\\WCH\\Toolchain\\RISC-V Embedded GCC\\bin\\riscv-none-embed-gcc.exe。"
+        }
+      }
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "wchVscode.refreshProjects",
+          "when": "view == wchVscodeSidebarView",
+          "group": "navigation"
+        },
+        {
+          "command": "wchVscode.refreshProjects",
+          "when": "view == wchVscodeProjectFilesView",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "pnpm run compile && pnpm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.118.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.39.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.7.2"
+  }
+}
