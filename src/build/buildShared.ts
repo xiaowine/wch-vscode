@@ -26,6 +26,18 @@ const MAKE_EXECUTABLE_SEGMENTS = [
 	'make.exe',
 ] as const;
 
+const OPENOCD_BIN_SEGMENTS = [
+	'resources',
+	'app',
+	'resources',
+	'win32',
+	'components',
+	'WCH',
+	'OpenOCD',
+	'OpenOCD',
+	'bin',
+] as const;
+
 export type ResolvedToolchainPaths = {
 	rootPath: string;
 	make: string;
@@ -35,6 +47,19 @@ export type ResolvedToolchainPaths = {
 	objdump: string;
 	size: string;
 };
+
+export type ResolvedOpenOcdPaths = {
+	executable: string;
+	config: string;
+};
+
+export function resolveMounRiverStudioExecutable(rootPath: string): string | undefined {
+	if (!rootPath) {
+		return undefined;
+	}
+
+	return path.join(rootPath, 'MounRiver Studio 2.exe');
+}
 
 export function getConfiguredMounRiverStudioPath(): string {
 	return vscode.workspace
@@ -70,6 +95,18 @@ export function resolveToolchainPaths(
 		objcopy: path.join(binPath, resolvedToolchain.executables.objcopy),
 		objdump: path.join(binPath, resolvedToolchain.executables.objdump),
 		size: path.join(binPath, resolvedToolchain.executables.size),
+	};
+}
+
+export function resolveOpenOcdPaths(rootPath: string): ResolvedOpenOcdPaths | undefined {
+	if (!rootPath) {
+		return undefined;
+	}
+
+	const binPath = path.join(rootPath, ...OPENOCD_BIN_SEGMENTS);
+	return {
+		executable: path.join(binPath, 'openocd.exe'),
+		config: path.join(binPath, 'wch-riscv.cfg'),
 	};
 }
 

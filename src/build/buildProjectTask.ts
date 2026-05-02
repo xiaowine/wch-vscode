@@ -6,6 +6,7 @@ import {
   resolveCurrentBuildTarget,
 } from "./buildProjectResolver";
 import { generateBuildFiles } from "./makefileGenerator";
+import { executeTaskAndWait } from "./taskExecution";
 
 export const BUILD_PROJECT_COMMAND = "wchVscode.buildProject";
 export const CLEAN_PROJECT_COMMAND = "wchVscode.cleanProject";
@@ -33,7 +34,19 @@ export function getCurrentBuildTargetTooltip(
 export async function buildCurrentProject(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
 ): Promise<void> {
-  await runProjectBuild(editor, "Build");
+  const result = await runProjectBuild(editor, "Build", false, true);
+  showBuildResultMessage(result);
+}
+
+export async function buildCurrentProjectAndWait(
+  editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
+): Promise<boolean> {
+  const result = await runProjectBuild(editor, "Build", false, true);
+  showBuildResultMessage(result);
+  if (result.started && result.exitCode === 0) {
+    return true;
+  }
+  return false;
 }
 
 export async function cleanCurrentProject(
@@ -49,6 +62,7 @@ export async function cleanCurrentProject(
 
   try {
     await deleteOutputDirectory(outputDirectory);
+    void vscode.window.showInformationMessage("清理成功");
   } catch (error) {
     void vscode.window.showErrorMessage(
       `清理构建目录失败：${asErrorMessage(error)}`,
@@ -59,20 +73,26 @@ export async function cleanCurrentProject(
 export async function cleanBuildCurrentProject(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
 ): Promise<void> {
-  await runProjectBuild(editor, "Clean Build", true);
+  const result = await runProjectBuild(editor, "Clean Build", true, true);
+  showBuildResultMessage(result);
 }
+
+type BuildRunResult =
+  | { started: false }
+  | { started: true; exitCode: number | undefined };
 
 async function runProjectBuild(
   editor: vscode.TextEditor | undefined,
   taskLabelPrefix: string,
   cleanOutputDirectory = false,
-): Promise<void> {
+  waitForExit = false,
+): Promise<BuildRunResult> {
   let project: ResolvedBuildProject;
   try {
     project = await resolveBuildProjectForExecution(editor);
   } catch (error) {
     void vscode.window.showErrorMessage(asErrorMessage(error));
-    return;
+    return { started: false };
   }
 
   if (cleanOutputDirectory) {
@@ -82,7 +102,7 @@ async function runProjectBuild(
       void vscode.window.showErrorMessage(
         `清理构建目录失败：${asErrorMessage(error)}`,
       );
-      return;
+      return { started: false };
     }
   }
 
@@ -92,10 +112,19 @@ async function runProjectBuild(
     void vscode.window.showErrorMessage(
       `生成 makefile 失败：${asErrorMessage(error)}`,
     );
-    return;
+    return { started: false };
   }
 
-  await vscode.tasks.executeTask(createBuildTask(project, taskLabelPrefix));
+  const task = createBuildTask(project, taskLabelPrefix);
+  if (waitForExit) {
+    return {
+      started: true,
+      exitCode: await executeTaskAndWait(task),
+    };
+  }
+
+  await vscode.tasks.executeTask(task);
+  return { started: true, exitCode: undefined };
 }
 
 function resolveBuildOutputDirectory(
@@ -189,6 +218,21 @@ function isEntryNotFoundError(error: unknown): boolean {
   return (
     error instanceof vscode.FileSystemError &&
     /FileNotFound|EntryNotFound/i.test(error.name)
+  );
+}
+
+function showBuildResultMessage(result: BuildRunResult): void {
+  if (!result.started) {
+    return;
+  }
+
+  if (result.exitCode === 0) {
+    void vscode.window.showInformationMessage("编译成功");
+    return;
+  }
+
+  void vscode.window.showErrorMessage(
+    `编译失败，make 退出码：${result.exitCode ?? "未知"}`,
   );
 }
 

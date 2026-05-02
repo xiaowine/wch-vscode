@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { GENERATE_CPPTOOLS_CONFIG_COMMAND } from "../cpptoolsConfigGenerator";
 import type { WchProjectModel } from "../models/WchProjectModel";
+import { OPEN_IN_MOUN_RIVER_STUDIO_COMMAND } from "../mounRiverStudioLauncher";
 import type { ProjectDetectionResult } from "../projectDetection";
 import type { ParsedWchProject } from "../projectState";
 import { getWchProjectState } from "../projectState";
@@ -89,6 +90,7 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
         ? [this.createUnsupportedItem(project?.unsupportedReason ?? "当前工程暂不支持")]
         : [
           this.createGenerateCppToolsItem(result.folder, models),
+          ...models.map((model) => this.createOpenInMounRiverStudioItem(model)),
           ...models.flatMap((model) => this.buildProjectModelItems(model)),
         ]
       : [];
@@ -341,6 +343,19 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
     ];
 
     return [root];
+  }
+
+  private createOpenInMounRiverStudioItem(model: WchProjectModel): SidebarItem {
+    const item = new SidebarItem("Open in MRS2");
+    item.description = model.project.name || model.baseName;
+    item.tooltip = `使用 MounRiver Studio 2 打开：${model.files.wvproj}`;
+    item.iconPath = new vscode.ThemeIcon("window");
+    item.command = {
+      command: OPEN_IN_MOUN_RIVER_STUDIO_COMMAND,
+      title: "Open in MRS2",
+      arguments: [model.files.wvproj],
+    };
+    return item;
   }
 
   // 创建分组节点，自动剔除空内容。

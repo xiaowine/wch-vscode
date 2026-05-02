@@ -5,7 +5,14 @@ import * as path from "node:path";
 // as well as import your extension to test it
 import * as vscode from "vscode";
 import type { WchProjectModel } from "../models/WchProjectModel";
-import { buildMarch, resolveCompilerExecutableName, resolveToolchainDirectoryName } from "../build/buildShared";
+import {
+  buildMarch,
+  resolveCompilerExecutableName,
+  resolveMounRiverStudioExecutable,
+  resolveOpenOcdPaths,
+  resolveToolchainDirectoryName,
+} from "../build/buildShared";
+import { toOpenOcdPath } from "../build/downloadProjectTask";
 import { resolveProjectFileSystemPath, toLogicalProjectPath } from "../build/buildProjectResolver";
 // import * as myExtension from '../../extension';
 
@@ -63,6 +70,32 @@ suite("wch-vscode Test Suite", () => {
     assert.strictEqual(
       resolveCompilerExecutableName("${WCH:Toolchain:GCC15}/bin/riscv-none-embed-gdb.exe"),
       "riscv32-wch-elf-gcc.exe",
+    );
+  });
+
+  test("openocd paths are resolved relative to MounRiver Studio root", () => {
+    const paths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    assert.strictEqual(
+      paths?.config,
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
+    );
+    assert.strictEqual(
+      paths?.executable,
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\openocd.exe",
+    );
+  });
+
+  test("openocd command paths use forward slashes for Tcl parsing", () => {
+    assert.strictEqual(
+      toOpenOcdPath("c:\\Users\\xiaow\\Downloads\\hard\\ch32l103\\EXAM\\FreeRTOS\\obj\\FreeRTOS.hex"),
+      "c:/Users/xiaow/Downloads/hard/ch32l103/EXAM/FreeRTOS/obj/FreeRTOS.hex",
+    );
+  });
+
+  test("MRS2 executable is resolved relative to install root", () => {
+    assert.strictEqual(
+      resolveMounRiverStudioExecutable("F:\\MounRiver\\MounRiver_Studio2"),
+      "F:\\MounRiver\\MounRiver_Studio2\\MounRiver Studio 2.exe",
     );
   });
 });

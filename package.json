@@ -37,6 +37,18 @@
       {
         "command": "wchVscode.cleanBuildProject",
         "title": "Clean and Build"
+      },
+      {
+        "command": "wchVscode.downloadProject",
+        "title": "Download"
+      },
+      {
+        "command": "wchVscode.buildDownloadProject",
+        "title": "Build and Download"
+      },
+      {
+        "command": "wchVscode.openInMounRiverStudio",
+        "title": "Open in MRS2"
       }
     ],
     "viewsContainers": {

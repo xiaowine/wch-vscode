@@ -17,12 +17,26 @@ import {
   refreshProjectDetectionViews,
   registerWorkspaceRefresh,
 } from "./projectDetection";
+import {
+  downloadCurrentProject,
+  DOWNLOAD_PROJECT_COMMAND,
+  getCurrentDownloadTargetTooltip,
+} from "./build/downloadProjectTask";
+import {
+  buildDownloadCurrentProject,
+  BUILD_DOWNLOAD_PROJECT_COMMAND,
+  getCurrentBuildDownloadTargetTooltip,
+} from "./build/buildDownloadProjectTask";
 import { getWchProjectState } from "./projectState";
 import { resolveCurrentBuildTarget } from "./build/buildProjectResolver";
 import {
   COPY_SIDEBAR_VALUE_COMMAND,
   WchVscodeSidebarProvider,
 } from "./sidebar/WchVscodeSidebarProvider";
+import {
+  openProjectInMounRiverStudio,
+  OPEN_IN_MOUN_RIVER_STUDIO_COMMAND,
+} from "./mounRiverStudioLauncher";
 import { WchProjectFilesProvider } from "./sidebar/WchProjectFilesProvider";
 import type { WchProjectModel } from "./models/WchProjectModel";
 
@@ -31,28 +45,36 @@ export function activate(context: vscode.ExtensionContext) {
   const sidebarProvider = new WchVscodeSidebarProvider();
   const projectFilesProvider = new WchProjectFilesProvider();
   const providers = [sidebarProvider, projectFilesProvider];
-  const targetInfoStatusBarItem = createStatusBarItem(
-    "WCH",
-    "WCH Target",
-    -99,
-  );
+  const targetInfoStatusBarItem = createStatusBarItem("WCH", "WCH Target", -99);
   const cleanStatusBarItem = createBuildStatusBarItem(
     "$(trash) Clean",
     CLEAN_PROJECT_COMMAND,
     "WCH Clean",
-    -102,
-  );
-  const cleanBuildStatusBarItem = createBuildStatusBarItem(
-    "$(debug-restart) Clean Build",
-    CLEAN_BUILD_PROJECT_COMMAND,
-    "WCH Clean Build",
-    -101,
+    -100,
   );
   const buildStatusBarItem = createBuildStatusBarItem(
     "$(tools) Build",
     BUILD_PROJECT_COMMAND,
     "WCH Build",
-    -100,
+    -101,
+  );
+  const cleanBuildStatusBarItem = createBuildStatusBarItem(
+    "$(debug-restart) Clean Build",
+    CLEAN_BUILD_PROJECT_COMMAND,
+    "WCH Clean Build",
+    -102,
+  );
+  const downloadStatusBarItem = createBuildStatusBarItem(
+    "$(cloud-download) Download",
+    DOWNLOAD_PROJECT_COMMAND,
+    "WCH Download",
+    -103,
+  );
+  const buildDownloadStatusBarItem = createBuildStatusBarItem(
+    "$(sync) Build Download",
+    BUILD_DOWNLOAD_PROJECT_COMMAND,
+    "WCH Build Download",
+    -104,
   );
   registerWorkspaceRefresh(providers, context, () =>
     updateBuildStatusBarItems(
@@ -60,6 +82,8 @@ export function activate(context: vscode.ExtensionContext) {
       cleanStatusBarItem,
       cleanBuildStatusBarItem,
       buildStatusBarItem,
+      downloadStatusBarItem,
+      buildDownloadStatusBarItem,
     ),
   );
   // 扩展激活时先做一次项目检测，并在缺少 cpptools 配置时自动补齐。
@@ -69,6 +93,8 @@ export function activate(context: vscode.ExtensionContext) {
     cleanStatusBarItem,
     buildStatusBarItem,
     cleanBuildStatusBarItem,
+    downloadStatusBarItem,
+    buildDownloadStatusBarItem,
   );
   // 注册侧栏刷新命令，供标题栏按钮触发重新检测和解析。
   const refreshProjectsCommand = vscode.commands.registerCommand(
@@ -80,6 +106,8 @@ export function activate(context: vscode.ExtensionContext) {
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
+        downloadStatusBarItem,
+        buildDownloadStatusBarItem,
       );
     },
   );
@@ -92,6 +120,8 @@ export function activate(context: vscode.ExtensionContext) {
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
+        downloadStatusBarItem,
+        buildDownloadStatusBarItem,
       );
     },
   );
@@ -104,6 +134,8 @@ export function activate(context: vscode.ExtensionContext) {
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
+        downloadStatusBarItem,
+        buildDownloadStatusBarItem,
       );
     },
   );
@@ -116,6 +148,36 @@ export function activate(context: vscode.ExtensionContext) {
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
+        downloadStatusBarItem,
+        buildDownloadStatusBarItem,
+      );
+    },
+  );
+  const downloadProjectCommand = vscode.commands.registerCommand(
+    DOWNLOAD_PROJECT_COMMAND,
+    async () => {
+      await downloadCurrentProject();
+      updateBuildStatusBarItems(
+        targetInfoStatusBarItem,
+        cleanStatusBarItem,
+        cleanBuildStatusBarItem,
+        buildStatusBarItem,
+        downloadStatusBarItem,
+        buildDownloadStatusBarItem,
+      );
+    },
+  );
+  const buildDownloadProjectCommand = vscode.commands.registerCommand(
+    BUILD_DOWNLOAD_PROJECT_COMMAND,
+    async () => {
+      await buildDownloadCurrentProject();
+      updateBuildStatusBarItems(
+        targetInfoStatusBarItem,
+        cleanStatusBarItem,
+        cleanBuildStatusBarItem,
+        buildStatusBarItem,
+        downloadStatusBarItem,
+        buildDownloadStatusBarItem,
       );
     },
   );
@@ -131,10 +193,14 @@ export function activate(context: vscode.ExtensionContext) {
   const generateCppToolsConfigCommand = vscode.commands.registerCommand(
     GENERATE_CPPTOOLS_CONFIG_COMMAND,
     async (folder: vscode.WorkspaceFolder, models: WchProjectModel[]) => {
-      const file = await generateCppToolsConfigFile(folder, models);
-      const document = await vscode.workspace.openTextDocument(file);
-      await vscode.window.showTextDocument(document, { preview: false });
+      await generateCppToolsConfigFile(folder, models);
       void vscode.window.showInformationMessage("已生成 C/C++ 配置文件");
+    },
+  );
+  const openInMounRiverStudioCommand = vscode.commands.registerCommand(
+    OPEN_IN_MOUN_RIVER_STUDIO_COMMAND,
+    async (wvprojPath: string) => {
+      await openProjectInMounRiverStudio(wvprojPath);
     },
   );
 
@@ -142,12 +208,17 @@ export function activate(context: vscode.ExtensionContext) {
     buildProjectCommand,
     cleanProjectCommand,
     cleanBuildProjectCommand,
+    downloadProjectCommand,
+    buildDownloadProjectCommand,
     targetInfoStatusBarItem,
     cleanStatusBarItem,
     buildStatusBarItem,
     cleanBuildStatusBarItem,
+    downloadStatusBarItem,
+    buildDownloadStatusBarItem,
     copySidebarValueCommand,
     generateCppToolsConfigCommand,
+    openInMounRiverStudioCommand,
     refreshProjectsCommand,
     vscode.window.registerTreeDataProvider(
       "wchVscodeSidebarView",
@@ -163,6 +234,8 @@ export function activate(context: vscode.ExtensionContext) {
         cleanStatusBarItem,
         cleanBuildStatusBarItem,
         buildStatusBarItem,
+        downloadStatusBarItem,
+        buildDownloadStatusBarItem,
       ),
     ),
   );
@@ -177,6 +250,8 @@ async function initializeProjectState(
   cleanStatusBarItem: vscode.StatusBarItem,
   buildStatusBarItem: vscode.StatusBarItem,
   cleanBuildStatusBarItem: vscode.StatusBarItem,
+  downloadStatusBarItem: vscode.StatusBarItem,
+  buildDownloadStatusBarItem: vscode.StatusBarItem,
 ): Promise<void> {
   await refreshProjectDetectionViews(providers);
 
@@ -197,6 +272,8 @@ async function initializeProjectState(
     cleanStatusBarItem,
     cleanBuildStatusBarItem,
     buildStatusBarItem,
+    downloadStatusBarItem,
+    buildDownloadStatusBarItem,
   );
 }
 
@@ -230,6 +307,8 @@ function updateBuildStatusBarItems(
   cleanStatusBarItem: vscode.StatusBarItem,
   cleanBuildStatusBarItem: vscode.StatusBarItem,
   buildStatusBarItem: vscode.StatusBarItem,
+  downloadStatusBarItem: vscode.StatusBarItem,
+  buildDownloadStatusBarItem: vscode.StatusBarItem,
 ): void {
   updateTargetInfoStatusBarItem(targetInfoStatusBarItem);
   cleanStatusBarItem.tooltip = getCurrentBuildTargetTooltip(undefined, "Clean");
@@ -241,6 +320,10 @@ function updateBuildStatusBarItems(
   cleanBuildStatusBarItem.show();
   buildStatusBarItem.tooltip = getCurrentBuildTargetTooltip(undefined, "Build");
   buildStatusBarItem.show();
+  downloadStatusBarItem.tooltip = getCurrentDownloadTargetTooltip();
+  downloadStatusBarItem.show();
+  buildDownloadStatusBarItem.tooltip = getCurrentBuildDownloadTargetTooltip();
+  buildDownloadStatusBarItem.show();
 }
 
 function updateTargetInfoStatusBarItem(
@@ -254,7 +337,8 @@ function updateTargetInfoStatusBarItem(
 
   const { model } = resolution.target;
   const projectName = model.project.name || model.baseName;
-  const mcuName = model.chip.mcu || model.chip.series || model.project.architecture;
+  const mcuName =
+    model.chip.mcu || model.chip.series || model.project.architecture;
   targetInfoStatusBarItem.text = `${projectName} · ${mcuName}`;
   targetInfoStatusBarItem.tooltip = `${projectName}\nMCU: ${mcuName}`;
   targetInfoStatusBarItem.show();
