@@ -62,6 +62,7 @@ class WchRiscvDebugSession {
   }
 
   private onDapData(chunk: Buffer): void {
+    // DAP 走标准 Content-Length 分帧；这里按帧拆包后逐条分发请求。
     this.dapBuffer = Buffer.concat([this.dapBuffer, chunk]);
     while (true) {
       const headerEnd = this.dapBuffer.indexOf("\r\n\r\n");
@@ -205,6 +206,7 @@ class WchRiscvDebugSession {
   }
 
   private async handleStackTrace(request: DapMessage): Promise<void> {
+    // 栈帧来自 GDB MI，先取原始 frame，再补齐 VS Code 需要的绝对路径信息。
     const record = await this.gdbCommand("-stack-list-frames");
     const rawFrames = getList(record.results.stack);
     this.stackFrames.clear();
@@ -244,6 +246,7 @@ class WchRiscvDebugSession {
   }
 
   private resolveFrameSourcePath(frame: MiTuple): string {
+    // 优先用 MI 返回的 fullname/file；缺失时再依赖最近一次 stopped 记录。
     const rawPath = getString(frame.fullname) || getString(frame.file) || this.lastStoppedLocation?.file || "";
     if (!rawPath) {
       return "";
@@ -253,6 +256,7 @@ class WchRiscvDebugSession {
   }
 
   private resolveSourcePath(rawPath: string): string {
+    // 相对路径优先按 ELF 所在目录解析，其次按工程根目录解析。
     const normalizedRawPath = path.normalize(rawPath);
     if (path.isAbsolute(normalizedRawPath)) {
       return normalizedRawPath;
@@ -478,6 +482,7 @@ class WchRiscvDebugSession {
   }
 
   private onGdbData(chunk: Buffer): void {
+    // GDB MI 按行输出；先拆出完整行，再把残留的 (gdb) prompt 单独识别出来。
     this.gdbBuffer += chunk.toString("utf8");
     while (true) {
       const newlineIndex = this.gdbBuffer.indexOf("\n");
@@ -498,6 +503,7 @@ class WchRiscvDebugSession {
   }
 
   private onMiRecord(record: MiRecord): void {
+    // 先让等待中的命令和事件监听器都看到这条记录，再按记录类型分类处理。
     for (const waiter of [...this.miRecordWaiters]) {
       waiter(record);
     }
@@ -549,6 +555,7 @@ class WchRiscvDebugSession {
     timeoutMs: number,
     timeoutMessage: string,
   ): { promise: Promise<void>; cancel(): void } {
+    // 用于等待某类 MI 事件到达，比如 prompt、stopped 或某条命令的结束响应。
     let timer: NodeJS.Timeout | undefined;
     let waiter: ((record: MiRecord) => void) | undefined;
     const cancel = () => {
@@ -649,6 +656,7 @@ class WchRiscvDebugSession {
   }
 
   private toBreakpointKey(sourcePath: string): string {
+    // Windows 下路径大小写不敏感，统一 key 便于同一文件的断点状态复用。
     const normalizedPath = path.normalize(sourcePath);
     return process.platform === "win32" ? normalizedPath.toLowerCase() : normalizedPath;
   }
@@ -672,6 +680,7 @@ class WchRiscvDebugSession {
   }
 
   private captureStoppedFrame(frame: MiTuple): void {
+    // stopped 事件里如果带了 frame，就用它覆盖 console 兜底位置，精度更高。
     const file = getString(frame.fullname) || getString(frame.file);
     const line = Number.parseInt(getString(frame.line), 10);
     if (!file || !Number.isFinite(line)) {
@@ -701,6 +710,8 @@ class WchRiscvDebugSession {
   private async disconnect(): Promise<void> {
     try {
       if (this.gdb && !this.gdb.killed) {
+        // VS Code 停止调试时，先把 MCU 从调试态恢复到上电运行态，再退出 GDB。
+        await this.resetTargetBeforeDisconnect();
         await this.gdbCommand("-gdb-exit");
       }
     } catch {
@@ -708,6 +719,37 @@ class WchRiscvDebugSession {
     }
     if (this.openOcd && !this.openOcd.killed) {
       this.openOcd.kill();
+    }
+  }
+
+  private async resetTargetBeforeDisconnect(): Promise<void> {
+    // 先清掉本次会话插入的硬件断点，否则复位后可能立刻再次停在用户断点。
+    await this.tryGdbCommand("-break-delete");
+
+    // WCH OpenOCD 对 reset run 的行为不够稳定，因此采用 reset halt 再 resume 的组合。
+    if (await this.tryGdbCommand(`-interpreter-exec console ${quoteMiArgument("monitor reset halt")}`)) {
+      await this.tryGdbCommand(`-interpreter-exec console ${quoteMiArgument("monitor resume")}`);
+      this.markTargetRunning();
+      return;
+    }
+
+    // 老配置如果不支持 reset halt，则退回普通 reset 再继续运行。
+    await this.tryGdbCommand(`-interpreter-exec console ${quoteMiArgument("monitor reset")}`);
+    if (await this.tryGdbCommand("-exec-continue")) {
+      this.markTargetRunning();
+    }
+  }
+
+  private async tryGdbCommand(command: string): Promise<boolean> {
+    try {
+      await this.gdbCommand(command);
+      return true;
+    } catch (error) {
+      // 目标已经在运行时，GDB 可能回报 running；对恢复运行流程来说这仍然算成功。
+      if (/running/i.test(asErrorMessage(error))) {
+        return true;
+      }
+      return false;
     }
   }
 
