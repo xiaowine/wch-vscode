@@ -46,6 +46,16 @@ export type ResolvedBuildProject = {
 	hasCppSources: boolean;
 };
 
+export type BuildArtifactPaths = {
+	outputDirectory: string;
+	targetBaseName: string;
+	elfPath: string;
+	hexPath: string;
+	lstPath: string;
+	sizPath: string;
+	mapFilePath?: string;
+};
+
 export type BuildTargetResolution = {
 	target?: BuildTarget;
 	error?: string;
@@ -147,29 +157,37 @@ export async function resolveBuildProjectForExecution(
 		throw new Error('未发现可编译源码');
 	}
 
-	const targetBaseName = resolveArtifactBaseName(model);
-	const elfPath = path.join(outputDirectory, `${targetBaseName}.elf`);
-	const hexPath = path.join(outputDirectory, `${targetBaseName}.hex`);
-	const lstPath = path.join(outputDirectory, `${targetBaseName}.lst`);
-	const sizPath = path.join(outputDirectory, `${targetBaseName}.siz`);
+	const artifactPaths = resolveBuildArtifactPaths(model);
 	const otherObjects = model.linker.otherObjects.map((value) => resolveProjectFileSystemPath(model, value));
-	const mapFilePath = resolveMapFilePath(model, outputDirectory, targetBaseName);
 
 	return {
 		workspaceFolder,
 		model,
-		outputDirectory,
-		targetBaseName,
-		elfPath,
-		hexPath,
-		lstPath,
-		sizPath,
-		mapFilePath,
+		...artifactPaths,
 		linkerScriptPath,
 		toolchainPaths,
 		sources,
 		otherObjects,
 		hasCppSources: sources.some((source) => source.language === 'cpp'),
+	};
+}
+
+export function resolveBuildArtifactPaths(model: WchProjectModel): BuildArtifactPaths {
+	const outputDirectoryName = model.build.configName.trim();
+	if (!outputDirectoryName) {
+		throw new Error('当前工程缺少 build.configName，无法生成构建目录');
+	}
+
+	const outputDirectory = path.join(model.folderPath, outputDirectoryName);
+	const targetBaseName = resolveArtifactBaseName(model);
+	return {
+		outputDirectory,
+		targetBaseName,
+		elfPath: path.join(outputDirectory, `${targetBaseName}.elf`),
+		hexPath: path.join(outputDirectory, `${targetBaseName}.hex`),
+		lstPath: path.join(outputDirectory, `${targetBaseName}.lst`),
+		sizPath: path.join(outputDirectory, `${targetBaseName}.siz`),
+		mapFilePath: resolveMapFilePath(model, outputDirectory, targetBaseName),
 	};
 }
 

@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@vscode/debugadapter':
+        specifier: ^1.68.0
+        version: 1.68.0
+      '@vscode/debugprotocol':
+        specifier: ^1.68.0
+        version: 1.68.0
       fast-xml-parser:
         specifier: ^5.7.2
         version: 5.7.2
@@ -202,6 +208,13 @@ packages:
   '@typescript-eslint/visitor-keys@8.59.1':
     resolution: {integrity: sha512-LdDNl6C5iJExcM0Yh0PwAIBb9PrSiCsWamF/JyEZawm3kFDnRoaq3LGE4bpyRao/fWeGKKyw7icx0YxrLFC5Cg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@vscode/debugadapter@1.68.0':
+    resolution: {integrity: sha512-D6gk5Fw2y4FV8oYmltoXpj+VAZexxJFopN/mcZ6YcgzQE9dgq2L45Aj3GLxScJOD6GeLILcxJIaA8l3v11esGg==}
+    engines: {node: '>=14'}
+
+  '@vscode/debugprotocol@1.68.0':
+    resolution: {integrity: sha512-2J27dysaXmvnfuhFGhfeuxfHRXunqNPxtBoR3koiTOA9rdxWNDTa1zIFLCFMSHJ9MPTPKFcBeblsyaCJCIlQxg==}
 
   '@vscode/test-cli@0.0.12':
     resolution: {integrity: sha512-iYN0fDg29+a2Xelle/Y56Xvv7Nc8Thzq4VwpzAF/SIE6918rDicqfsQxV6w1ttr2+SOm+10laGuY9FG2ptEKsQ==}
@@ -1163,6 +1176,12 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 8.59.1
       eslint-visitor-keys: 5.0.1
+
+  '@vscode/debugadapter@1.68.0':
+    dependencies:
+      '@vscode/debugprotocol': 1.68.0
+
+  '@vscode/debugprotocol@1.68.0': {}
 
   '@vscode/test-cli@0.0.12':
     dependencies:

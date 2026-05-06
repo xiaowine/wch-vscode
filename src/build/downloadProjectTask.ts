@@ -25,50 +25,54 @@ export function getCurrentDownloadTargetTooltip(
 
 export async function downloadCurrentProject(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
-): Promise<void> {
+  showSuccessMessage = true,
+): Promise<boolean> {
   let project: ResolvedBuildProject;
   try {
     project = await resolveBuildProjectForExecution(editor);
   } catch (error) {
     void vscode.window.showErrorMessage(asErrorMessage(error));
-    return;
+    return false;
   }
 
   const mounRiverStudioPath = getConfiguredMounRiverStudioPath();
   const openOcdPaths = resolveOpenOcdPaths(mounRiverStudioPath);
   if (!openOcdPaths) {
     void vscode.window.showErrorMessage("请先配置 wchVscode.mounRiverStudioPath");
-    return;
+    return false;
   }
 
   if (!await fileExists(openOcdPaths.executable)) {
     void vscode.window.showErrorMessage(`MRS 安装路径无效，未找到 openocd.exe：${openOcdPaths.executable}`);
-    return;
+    return false;
   }
 
   if (!await fileExists(openOcdPaths.config)) {
     void vscode.window.showErrorMessage(`MRS 安装路径无效，未找到 OpenOCD 配置：${openOcdPaths.config}`);
-    return;
+    return false;
   }
 
   const downloadTargetPath = resolveDownloadTargetPath(project);
   if (!await fileExists(downloadTargetPath)) {
     void vscode.window.showErrorMessage(`未找到可下载文件，请先构建工程：${downloadTargetPath}`);
-    return;
+    return false;
   }
 
   const task = createDownloadTask(project, openOcdPaths, downloadTargetPath);
   try {
     const exitCode = await executeTaskAndWait(task);
     if (exitCode === 0) {
-      void vscode.window.showInformationMessage("下载成功");
-      return;
+      if (showSuccessMessage) {
+        void vscode.window.showInformationMessage("WCH: 下载成功");
+      }
+      return true;
     }
 
     void vscode.window.showErrorMessage(`下载失败，OpenOCD 退出码：${exitCode ?? "未知"}`);
   } catch (error) {
     void vscode.window.showErrorMessage(`下载失败：${asErrorMessage(error)}`);
   }
+  return false;
 }
 
 function createDownloadTask(

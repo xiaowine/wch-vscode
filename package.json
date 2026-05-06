@@ -47,8 +47,25 @@
         "title": "Build and Download"
       },
       {
+        "command": "wchVscode.debugProject",
+        "title": "Debug"
+      },
+      {
         "command": "wchVscode.openInMounRiverStudio",
         "title": "Open in MRS2"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "wch-riscv",
+        "label": "WCH RISC-V",
+        "program": "./out/debug/wchRiscvDebugAdapter.js",
+        "runtime": "node",
+        "languages": [
+          "c",
+          "cpp",
+          "asm"
+        ]
       }
     ],
     "viewsContainers": {
@@ -118,6 +135,8 @@
     "typescript-eslint": "^8.56.1"
   },
   "dependencies": {
+    "@vscode/debugadapter": "^1.68.0",
+    "@vscode/debugprotocol": "^1.68.0",
     "fast-xml-parser": "^5.7.2"
   }
 }

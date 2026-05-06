@@ -40,9 +40,10 @@ export async function buildCurrentProject(
 
 export async function buildCurrentProjectAndWait(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
+  showSuccessMessage = true,
 ): Promise<boolean> {
   const result = await runProjectBuild(editor, "Build", false, true);
-  showBuildResultMessage(result);
+  showBuildResultMessage(result, showSuccessMessage);
   if (result.started && result.exitCode === 0) {
     return true;
   }
@@ -62,7 +63,7 @@ export async function cleanCurrentProject(
 
   try {
     await deleteOutputDirectory(outputDirectory);
-    void vscode.window.showInformationMessage("清理成功");
+    void vscode.window.showInformationMessage("WCH: 清理成功");
   } catch (error) {
     void vscode.window.showErrorMessage(
       `清理构建目录失败：${asErrorMessage(error)}`,
@@ -221,13 +222,18 @@ function isEntryNotFoundError(error: unknown): boolean {
   );
 }
 
-function showBuildResultMessage(result: BuildRunResult): void {
+function showBuildResultMessage(
+  result: BuildRunResult,
+  showSuccessMessage = true,
+): void {
   if (!result.started) {
     return;
   }
 
   if (result.exitCode === 0) {
-    void vscode.window.showInformationMessage("编译成功");
+    if (showSuccessMessage) {
+      void vscode.window.showInformationMessage("WCH: 编译成功");
+    }
     return;
   }
 

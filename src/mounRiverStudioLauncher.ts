@@ -53,7 +53,7 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
     const opened = await vscode.env.openExternal(projectUri);
     outputChannel.appendLine(`openExternal result: ${opened}`);
     if (opened) {
-      void vscode.window.showInformationMessage("已在 MRS2 打开项目");
+      void vscode.window.showInformationMessage("WCH: 已在 MRS2 打开项目");
       return;
     }
 
@@ -61,7 +61,7 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
     outputChannel.appendLine(`hidden terminal command: ${command}`);
     const terminal = getOrCreateHiddenTerminal(mounRiverStudioPath);
     terminal.sendText(command);
-    void vscode.window.showInformationMessage("已在 MRS2 打开项目");
+    void vscode.window.showInformationMessage("WCH: 已在 MRS2 打开项目");
   } catch (error) {
     outputChannel.appendLine(`terminal launch threw: ${asErrorMessage(error)}`);
     outputChannel.show(true);

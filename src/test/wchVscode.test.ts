@@ -1,21 +1,23 @@
 import * as assert from "assert";
 import * as path from "node:path";
 
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
 import * as vscode from "vscode";
 import type { WchProjectModel } from "../models/WchProjectModel";
 import {
   buildMarch,
   resolveCompilerExecutableName,
+  resolveGdbExecutableName,
+  resolveMounRiverOpenOcdExecutable,
+  resolveMounRiverOpenOcdValue,
   resolveMounRiverStudioExecutable,
   resolveOpenOcdPaths,
   resolveToolchainDirectoryName,
 } from "../build/buildShared";
 import { toOpenOcdPath } from "../build/downloadProjectTask";
 import { resolveProjectFileSystemPath, toLogicalProjectPath } from "../build/buildProjectResolver";
-// import * as myExtension from '../../extension';
-
+import type { ResolvedBuildProject } from "../build/buildProjectResolver";
+import { buildOpenOcdServerArgs, resolveConfiguredOpenOcdExecutable } from "../debug/debugConfig";
+import { getList, getString, getTuple, parseMiLine } from "../debug/miParser";
 suite("wch-vscode Test Suite", () => {
   vscode.window.showInformationMessage("Start wch-vscode tests.");
 
@@ -73,8 +75,27 @@ suite("wch-vscode Test Suite", () => {
     );
   });
 
+  test("gdb executable follows model build prefix", () => {
+    assert.strictEqual(
+      resolveGdbExecutableName("${WCH:Toolchain:GCC8}/bin/riscv-none-embed-gdb.exe"),
+      "riscv-none-embed-gdb.exe",
+    );
+    assert.strictEqual(
+      resolveGdbExecutableName("${WCH:Toolchain:GCC12}/bin/riscv-none-embed-gdb.exe"),
+      "riscv-wch-elf-gdb.exe",
+    );
+    assert.strictEqual(
+      resolveGdbExecutableName("${WCH:Toolchain:GCC15}/bin/riscv-none-embed-gdb.exe"),
+      "riscv32-wch-elf-gdb.exe",
+    );
+  });
+
   test("openocd paths are resolved relative to MounRiver Studio root", () => {
     const paths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    assert.strictEqual(
+      paths?.root,
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD",
+    );
     assert.strictEqual(
       paths?.config,
       "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
@@ -82,6 +103,10 @@ suite("wch-vscode Test Suite", () => {
     assert.strictEqual(
       paths?.executable,
       "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\openocd.exe",
+    );
+    assert.strictEqual(
+      paths?.scripts,
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\share\\openocd\\scripts",
     );
   });
 
@@ -92,6 +117,148 @@ suite("wch-vscode Test Suite", () => {
     );
   });
 
+  test("debug openocd args prefer project launch options", () => {
+    const project = createResolvedBuildProject();
+    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    assert.ok(openOcdPaths);
+    project.model.debug.openOcdConfigOptions = ["-f", "interface/wch-link.cfg", "-f", "target/wch-riscv.cfg"];
+    project.model.debug.gdbPort = 3334;
+    project.model.debug.telnetPort = 4445;
+    project.model.debug.tclPort = 6667;
+
+    assert.deepStrictEqual(
+      buildOpenOcdServerArgs(project, openOcdPaths),
+      [
+        "-f",
+        "interface/wch-link.cfg",
+        "-f",
+        "target/wch-riscv.cfg",
+        "-c",
+        "gdb_port 3334",
+        "-c",
+        "telnet_port 4445",
+        "-c",
+        "tcl_port 6667",
+      ],
+    );
+  });
+
+  test("debug openocd args fall back to MRS default config", () => {
+    const project = createResolvedBuildProject();
+    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    assert.ok(openOcdPaths);
+    project.model.debug.openOcdConfigOptions = [];
+
+    assert.deepStrictEqual(
+      buildOpenOcdServerArgs(project, openOcdPaths),
+      [
+        "-f",
+        "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
+        "-c",
+        "gdb_port 3333",
+        "-c",
+        "telnet_port 4444",
+        "-c",
+        "tcl_port 6666",
+      ],
+    );
+  });
+
+  test("MRS openocd values resolve WCH variable from component root", () => {
+    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    assert.ok(openOcdPaths);
+
+    assert.strictEqual(
+      resolveMounRiverOpenOcdValue(openOcdPaths, "${WCH:OpenOCD:default}\\bin\\wch-riscv.cfg"),
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
+    );
+  });
+
+  test("MRS openocd values resolve quoted WCH variable paths", () => {
+    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    assert.ok(openOcdPaths);
+
+    assert.strictEqual(
+      resolveMounRiverOpenOcdValue(openOcdPaths, "\"${WCH:OpenOCD:default}/bin/wch-riscv.cfg\""),
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
+    );
+  });
+
+  test("MRS openocd executable resolves WCH default variable from install root", () => {
+    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    assert.ok(openOcdPaths);
+
+    assert.strictEqual(
+      resolveMounRiverOpenOcdExecutable(openOcdPaths, "${WCH:OpenOCD:default}"),
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\openocd.exe",
+    );
+  });
+
+  test("MRS openocd executable resolves WCH variable suffix from component root", () => {
+    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    assert.ok(openOcdPaths);
+
+    assert.strictEqual(
+      resolveMounRiverOpenOcdExecutable(openOcdPaths, "${WCH:OpenOCD:default}\\bin\\openocd.exe"),
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\openocd.exe",
+    );
+  });
+
+  test("debug openocd executable uses normalized model path", () => {
+    const project = createResolvedBuildProject();
+    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    assert.ok(openOcdPaths);
+    project.model.debug.openOcdExecutable = openOcdPaths.executable;
+
+    assert.strictEqual(
+      resolveConfiguredOpenOcdExecutable(project, openOcdPaths),
+      openOcdPaths.executable,
+    );
+  });
+
+  test("MI parser parses stopped async records", () => {
+    const record = parseMiLine('*stopped,reason="breakpoint-hit",frame={func="main",fullname="C:\\\\p\\\\main.c",line="42"}');
+    assert.strictEqual(record.kind, "exec");
+    if (record.kind !== "exec") {
+      return;
+    }
+
+    const frame = getTuple(record.results.frame);
+    assert.strictEqual(record.asyncClass, "stopped");
+    assert.strictEqual(getString(record.results.reason), "breakpoint-hit");
+    assert.strictEqual(getString(frame?.func), "main");
+    assert.strictEqual(getString(frame?.line), "42");
+  });
+
+  test("MI parser parses breakpoint, stack, variables, and error records", () => {
+    const breakpoint = parseMiLine('7^done,bkpt={number="1",type="hw breakpoint",disp="keep",enabled="y"}');
+    assert.strictEqual(breakpoint.kind, "result");
+    if (breakpoint.kind === "result") {
+      assert.strictEqual(breakpoint.token, 7);
+      assert.strictEqual(getString(getTuple(breakpoint.results.bkpt)?.type), "hw breakpoint");
+    }
+
+    const stack = parseMiLine('8^done,stack=[frame={level="0",func="main",fullname="C:\\\\p\\\\main.c",line="9"}]');
+    assert.strictEqual(stack.kind, "result");
+    if (stack.kind === "result") {
+      const frame = getTuple(getTuple(getList(stack.results.stack)[0])?.frame);
+      assert.strictEqual(getString(frame?.fullname), "C:\\p\\main.c");
+    }
+
+    const variables = parseMiLine('9^done,variables=[{name="counter",value="3"},{name="flag",type="int"}]');
+    assert.strictEqual(variables.kind, "result");
+    if (variables.kind === "result") {
+      assert.strictEqual(getString(getTuple(getList(variables.results.variables)[0])?.value), "3");
+    }
+
+    const error = parseMiLine('10^error,msg="No hardware breakpoint available"');
+    assert.strictEqual(error.kind, "result");
+    if (error.kind === "result") {
+      assert.strictEqual(error.resultClass, "error");
+      assert.strictEqual(getString(error.results.msg), "No hardware breakpoint available");
+    }
+  });
+
   test("MRS2 executable is resolved relative to install root", () => {
     assert.strictEqual(
       resolveMounRiverStudioExecutable("F:\\MounRiver\\MounRiver_Studio2"),
@@ -99,6 +266,39 @@ suite("wch-vscode Test Suite", () => {
     );
   });
 });
+
+function createResolvedBuildProject(): ResolvedBuildProject {
+  const model = createModel();
+  return {
+    workspaceFolder: {
+      uri: vscode.Uri.file(model.folderPath),
+      name: model.folderName,
+      index: 0,
+    },
+    model,
+    outputDirectory: path.join(model.folderPath, model.build.configName),
+    targetBaseName: model.project.name,
+    elfPath: path.join(model.folderPath, model.build.configName, `${model.project.name}.elf`),
+    hexPath: path.join(model.folderPath, model.build.configName, `${model.project.name}.hex`),
+    lstPath: path.join(model.folderPath, model.build.configName, `${model.project.name}.lst`),
+    sizPath: path.join(model.folderPath, model.build.configName, `${model.project.name}.siz`),
+    mapFilePath: path.join(model.folderPath, model.build.configName, `${model.project.name}.map`),
+    linkerScriptPath: path.join(model.folderPath, "Ld", "Link.ld"),
+    toolchainPaths: {
+      rootPath: "F:\\MounRiver\\MounRiver_Studio2",
+      make: "F:\\MounRiver\\MounRiver_Studio2\\make.exe",
+      gcc: "F:\\MounRiver\\MounRiver_Studio2\\riscv-wch-elf-gcc.exe",
+      gpp: "F:\\MounRiver\\MounRiver_Studio2\\riscv-wch-elf-g++.exe",
+      gdb: "F:\\MounRiver\\MounRiver_Studio2\\riscv-wch-elf-gdb.exe",
+      objcopy: "F:\\MounRiver\\MounRiver_Studio2\\riscv-wch-elf-objcopy.exe",
+      objdump: "F:\\MounRiver\\MounRiver_Studio2\\riscv-wch-elf-objdump.exe",
+      size: "F:\\MounRiver\\MounRiver_Studio2\\riscv-wch-elf-size.exe",
+    },
+    sources: [],
+    otherObjects: [],
+    hasCppSources: false,
+  };
+}
 
 function createModel(): WchProjectModel {
   return {

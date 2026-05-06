@@ -312,26 +312,6 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
         this.createListSection("Size Flags", model.postBuild.sizeFlags),
         this.createListSection("Size Args", model.postBuild.sizeArgs),
       ]),
-      this.createSection("Debug", [
-        this.createLeaf("Program", model.debug.programName),
-        this.createLeaf("GDB", model.debug.gdbExecutable),
-        this.createLeaf("OpenOCD", model.debug.openOcdExecutable),
-        this.createLeaf("Host", model.debug.host),
-        this.createLeaf(
-          "Ports",
-          `gdb:${model.debug.gdbPort} telnet:${model.debug.telnetPort} tcl:${model.debug.tclPort}`,
-        ),
-        this.createLeaf("Stop At", model.debug.stopAt),
-        this.createLeaf(
-          "Reset",
-          `${model.debug.firstResetType} -> ${model.debug.secondResetType}`,
-        ),
-        this.createListSection(
-          "OpenOCD Options",
-          model.debug.openOcdConfigOptions,
-        ),
-        this.createListSection("Startup Commands", model.debug.startupCommands),
-      ]),
       this.createSection("Flash", [
         this.createLeaf("Target", model.flash.targetPath),
         this.createLeaf("Address", model.flash.address),

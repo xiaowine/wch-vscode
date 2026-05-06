@@ -26,7 +26,7 @@ const MAKE_EXECUTABLE_SEGMENTS = [
 	'make.exe',
 ] as const;
 
-const OPENOCD_BIN_SEGMENTS = [
+const OPENOCD_ROOT_SEGMENTS = [
 	'resources',
 	'app',
 	'resources',
@@ -35,6 +35,10 @@ const OPENOCD_BIN_SEGMENTS = [
 	'WCH',
 	'OpenOCD',
 	'OpenOCD',
+] as const;
+
+const OPENOCD_BIN_SEGMENTS = [
+	...OPENOCD_ROOT_SEGMENTS,
 	'bin',
 ] as const;
 
@@ -43,14 +47,17 @@ export type ResolvedToolchainPaths = {
 	make: string;
 	gcc: string;
 	gpp: string;
+	gdb: string;
 	objcopy: string;
 	objdump: string;
 	size: string;
 };
 
 export type ResolvedOpenOcdPaths = {
+	root: string;
 	executable: string;
 	config: string;
+	scripts: string;
 };
 
 export function resolveMounRiverStudioExecutable(rootPath: string): string | undefined {
@@ -92,6 +99,7 @@ export function resolveToolchainPaths(
 		make: path.join(rootPath, ...MAKE_EXECUTABLE_SEGMENTS),
 		gcc: path.join(binPath, resolvedToolchain.executables.gcc),
 		gpp: path.join(binPath, resolvedToolchain.executables.gpp),
+		gdb: path.join(binPath, `${resolvedToolchain.executablePrefix}gdb.exe`),
 		objcopy: path.join(binPath, resolvedToolchain.executables.objcopy),
 		objdump: path.join(binPath, resolvedToolchain.executables.objdump),
 		size: path.join(binPath, resolvedToolchain.executables.size),
@@ -103,11 +111,71 @@ export function resolveOpenOcdPaths(rootPath: string): ResolvedOpenOcdPaths | un
 		return undefined;
 	}
 
+	const openOcdRootPath = path.join(rootPath, ...OPENOCD_ROOT_SEGMENTS);
 	const binPath = path.join(rootPath, ...OPENOCD_BIN_SEGMENTS);
 	return {
+		root: openOcdRootPath,
 		executable: path.join(binPath, 'openocd.exe'),
 		config: path.join(binPath, 'wch-riscv.cfg'),
+		scripts: path.join(openOcdRootPath, 'share', 'openocd', 'scripts'),
 	};
+}
+
+export function resolveMounRiverOpenOcdExecutable(
+	openOcdPaths: ResolvedOpenOcdPaths,
+	configuredExecutable: string,
+): string | undefined {
+	const value = normalizeMounRiverArgument(configuredExecutable);
+	if (!value || isWchOpenOcdDefaultVariable(value)) {
+		return openOcdPaths.executable;
+	}
+
+	const variablePath = resolveWchOpenOcdVariablePath(value, openOcdPaths.root);
+	if (variablePath) {
+		return variablePath;
+	}
+
+	return path.isAbsolute(value) ? value : undefined;
+}
+
+export function resolveMounRiverOpenOcdValue(
+	openOcdPaths: ResolvedOpenOcdPaths,
+	value: string,
+): string {
+	const normalizedValue = normalizeMounRiverArgument(value);
+	if (isWchOpenOcdDefaultVariable(normalizedValue)) {
+		return openOcdPaths.root;
+	}
+
+	return resolveWchOpenOcdVariablePath(normalizedValue, openOcdPaths.root) ?? normalizedValue;
+}
+
+export function normalizeMounRiverArgument(value: string): string {
+	const trimmedValue = value.trim();
+	if (trimmedValue.length < 2) {
+		return trimmedValue;
+	}
+
+	const firstChar = trimmedValue[0];
+	const lastChar = trimmedValue[trimmedValue.length - 1];
+	if ((firstChar === '"' && lastChar === '"') || (firstChar === "'" && lastChar === "'")) {
+		return trimmedValue.slice(1, -1).trim();
+	}
+
+	return trimmedValue;
+}
+
+function isWchOpenOcdDefaultVariable(value: string): boolean {
+	return /^\$\{WCH:OpenOCD:[^}]+}$/.test(value);
+}
+
+function resolveWchOpenOcdVariablePath(value: string, openOcdRootPath: string): string | undefined {
+	const match = /^\$\{WCH:OpenOCD:[^}]+}[/\\](.+)$/.exec(value);
+	if (!match) {
+		return undefined;
+	}
+
+	return path.join(openOcdRootPath, match[1]);
 }
 
 export function resolveToolchainDirectoryName(gdbExecutable: string): string | undefined {
@@ -132,6 +200,11 @@ export function resolveToolchainDirectoryName(gdbExecutable: string): string | u
 export function resolveCompilerExecutableName(gdbExecutable: string): string | undefined {
 	const toolExecutablePrefix = resolveToolExecutablePrefix(gdbExecutable);
 	return toolExecutablePrefix ? `${toolExecutablePrefix}gcc.exe` : undefined;
+}
+
+export function resolveGdbExecutableName(gdbExecutable: string): string | undefined {
+	const toolExecutablePrefix = resolveToolExecutablePrefix(gdbExecutable);
+	return toolExecutablePrefix ? `${toolExecutablePrefix}gdb.exe` : undefined;
 }
 
 export function resolveToolExecutablePrefix(gdbExecutable: string): string | undefined {

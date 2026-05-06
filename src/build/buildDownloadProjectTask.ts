@@ -15,20 +15,20 @@ export function getCurrentBuildDownloadTargetTooltip(
 
 export async function buildDownloadCurrentProject(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
-): Promise<void> {
+): Promise<boolean> {
   let buildSucceeded = false;
   try {
-    buildSucceeded = await buildCurrentProjectAndWait(editor);
+    buildSucceeded = await buildCurrentProjectAndWait(editor, false);
   } catch (error) {
     void vscode.window.showErrorMessage(`编译失败：${asErrorMessage(error)}`);
-    return;
+    return false;
   }
 
   if (!buildSucceeded) {
-    return;
+    return false;
   }
 
-  await downloadCurrentProject(editor);
+  return downloadCurrentProject(editor, false);
 }
 
 function asErrorMessage(error: unknown): string {

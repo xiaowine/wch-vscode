@@ -3,6 +3,13 @@ import type {
   WchProjectModel,
   WchResolvedToolchain,
 } from "./models/WchProjectModel";
+import {
+  getConfiguredMounRiverStudioPath,
+  normalizeMounRiverArgument,
+  resolveMounRiverOpenOcdExecutable,
+  resolveMounRiverOpenOcdValue,
+  resolveOpenOcdPaths,
+} from "./build/buildShared";
 import type {
   ParsedProjectPair,
   ParsedProjectFile,
@@ -106,6 +113,26 @@ function buildWchProjectModel(
     ) ??
     "";
   const resolvedToolchain = resolveToolchainMetadata(gdbExecutable);
+  const rawOpenOcdExecutable =
+    getString(openOcdCfg?.executable) ??
+    getString(
+      launchAttributes.strings.get(
+        "com.mounriver.debug.gdbjtag.openocd.gdbServerExecutable",
+      ),
+    ) ??
+    "";
+  const rawOpenOcdConfigOptions =
+    getStringArray(openOcdCfg?.configOptions).length > 0
+      ? getStringArray(openOcdCfg?.configOptions)
+      : getLaunchArguments(
+          launchAttributes.strings.get(
+            "com.mounriver.debug.gdbjtag.openocd.gdbServerOther",
+          ),
+        );
+  const resolvedOpenOcdConfig = resolveOpenOcdDebugConfig(
+    rawOpenOcdExecutable,
+    rawOpenOcdConfigOptions,
+  );
   const targetArchitecture =
     cprojectInfo.targetArchitecture ||
     getString(riscvTarget?.architecture) ||
@@ -569,22 +596,8 @@ function buildWchProjectModel(
     debug: {
       programName,
       gdbExecutable,
-      openOcdExecutable:
-        getString(openOcdCfg?.executable) ??
-        getString(
-          launchAttributes.strings.get(
-            "com.mounriver.debug.gdbjtag.openocd.gdbServerExecutable",
-          ),
-        ) ??
-        "",
-      openOcdConfigOptions:
-        getStringArray(openOcdCfg?.configOptions).length > 0
-          ? getStringArray(openOcdCfg?.configOptions)
-          : getLaunchCommands(
-              launchAttributes.strings.get(
-                "com.mounriver.debug.gdbjtag.openocd.gdbServerOther",
-              ),
-            ),
+      openOcdExecutable: resolvedOpenOcdConfig.executable,
+      openOcdConfigOptions: resolvedOpenOcdConfig.configOptions,
       host:
         getString(openOcdCfg?.host) ??
         getString(
@@ -1335,6 +1348,32 @@ function buildSizeArgs(
   return uniqueStrings([...flags, ...sizeFlags]);
 }
 
+function resolveOpenOcdDebugConfig(
+  executable: string,
+  configOptions: string[],
+): { executable: string; configOptions: string[] } {
+  const normalizedConfigOptions = configOptions.flatMap((item) =>
+    splitCommandLineArguments(item),
+  );
+  const mounRiverStudioPath = getConfiguredMounRiverStudioPath();
+  const openOcdPaths = resolveOpenOcdPaths(mounRiverStudioPath);
+  if (!openOcdPaths) {
+    return {
+      executable: normalizeMounRiverArgument(executable),
+      configOptions: normalizedConfigOptions.map((item) => normalizeMounRiverArgument(item)),
+    };
+  }
+
+  return {
+    executable:
+      resolveMounRiverOpenOcdExecutable(openOcdPaths, executable) ??
+      normalizeMounRiverArgument(executable),
+    configOptions: normalizedConfigOptions.map((item) =>
+      resolveMounRiverOpenOcdValue(openOcdPaths, item),
+    ),
+  };
+}
+
 function resolveToolchainMetadata(gdbExecutable: string): WchResolvedToolchain {
   const matchedToolchainName = /\$\{WCH:Toolchain:([^}]+)\}/
     .exec(gdbExecutable)?.[1]
@@ -1402,6 +1441,47 @@ function getLaunchCommands(value: unknown): string[] {
     .split(/\r?\n/)
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function getLaunchArguments(value: unknown): string[] {
+  return getLaunchCommands(value).flatMap((item) => splitCommandLineArguments(item));
+}
+
+function splitCommandLineArguments(value: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let quote: string | null = null;
+
+  for (let index = 0; index < value.length; index++) {
+    const char = value[index];
+    if ((char === '"' || char === "'") && quote === null) {
+      quote = char;
+      current += char;
+      continue;
+    }
+
+    if (quote === char) {
+      quote = null;
+      current += char;
+      continue;
+    }
+
+    if (/\s/.test(char) && quote === null) {
+      if (current.length > 0) {
+        args.push(current);
+        current = "";
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.length > 0) {
+    args.push(current);
+  }
+
+  return args;
 }
 
 function splitPipeList(value: string | null): string[] {
