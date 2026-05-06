@@ -118,7 +118,7 @@ export async function resolveBuildProjectForExecution(
 	}
 
 	const { workspaceFolder, model } = resolution.target;
-	if (model.chip.toolchain.toUpperCase() !== 'RISC-V') {
+	if (model.target.toolchain.toUpperCase() !== 'RISC-V') {
 		throw new Error('不支持，仅支持 RISC-V 工程');
 	}
 
@@ -141,7 +141,7 @@ export async function resolveBuildProjectForExecution(
 		throw new Error('MRS 安装路径无效，未找到 make.exe');
 	}
 
-	const linkerScriptValue = model.linker.linkerScript || model.build.linkerScript;
+	const linkerScriptValue = model.build.linker.script;
 	if (!linkerScriptValue) {
 		throw new Error('当前工程缺少链接脚本');
 	}
@@ -151,14 +151,14 @@ export async function resolveBuildProjectForExecution(
 		throw new Error(`链接脚本不存在：${linkerScriptPath}`);
 	}
 
-	const outputDirectory = path.join(model.folderPath, outputDirectoryName);
+	const outputDirectory = path.join(model.identity.folderPath, outputDirectoryName);
 	const sources = await discoverSourceFiles(model, outputDirectory);
 	if (sources.length === 0) {
 		throw new Error('未发现可编译源码');
 	}
 
 	const artifactPaths = resolveBuildArtifactPaths(model);
-	const otherObjects = model.linker.otherObjects.map((value) => resolveProjectFileSystemPath(model, value));
+	const otherObjects = model.build.linker.otherObjects.map((value) => resolveProjectFileSystemPath(model, value));
 
 	return {
 		workspaceFolder,
@@ -178,7 +178,7 @@ export function resolveBuildArtifactPaths(model: WchProjectModel): BuildArtifact
 		throw new Error('当前工程缺少 build.configName，无法生成构建目录');
 	}
 
-	const outputDirectory = path.join(model.folderPath, outputDirectoryName);
+	const outputDirectory = path.join(model.identity.folderPath, outputDirectoryName);
 	const targetBaseName = resolveArtifactBaseName(model);
 	return {
 		outputDirectory,
@@ -202,13 +202,13 @@ export function resolveProjectFileSystemPath(model: WchProjectModel, value: stri
 		return path.normalize(normalizedValue);
 	}
 
-	return path.resolve(model.folderPath, normalizedValue);
+	return path.resolve(model.identity.folderPath, normalizedValue);
 }
 
 export function toLogicalProjectPath(model: WchProjectModel, fileSystemPath: string): string | null {
 	const normalizedPath = path.resolve(fileSystemPath);
-	for (const linkedFolder of model.linkedFolders) {
-		const linkedFolderPath = path.resolve(model.folderPath, linkedFolder.location);
+	for (const linkedFolder of model.target.linkedFolders) {
+		const linkedFolderPath = path.resolve(model.identity.folderPath, linkedFolder.location);
 		if (!isPathInside(linkedFolderPath, normalizedPath)) {
 			continue;
 		}
@@ -217,11 +217,11 @@ export function toLogicalProjectPath(model: WchProjectModel, fileSystemPath: str
 		return toLogicalPath(path.join(linkedFolder.name, relativePath));
 	}
 
-	if (!isPathInside(model.folderPath, normalizedPath)) {
+	if (!isPathInside(model.identity.folderPath, normalizedPath)) {
 		return null;
 	}
 
-	return toLogicalPath(path.relative(model.folderPath, normalizedPath));
+	return toLogicalPath(path.relative(model.identity.folderPath, normalizedPath));
 }
 
 function getBuildTargets(): BuildTarget[] {
@@ -255,12 +255,12 @@ function getUnsupportedProjectMessageForFile(filePath: string): string | undefin
 }
 
 function isPathInsideModel(model: WchProjectModel, filePath: string): boolean {
-	if (isPathInside(model.folderPath, filePath)) {
+	if (isPathInside(model.identity.folderPath, filePath)) {
 		return true;
 	}
 
-	return model.linkedFolders.some((linkedFolder) =>
-		isPathInside(path.resolve(model.folderPath, linkedFolder.location), filePath),
+	return model.target.linkedFolders.some((linkedFolder) =>
+		isPathInside(path.resolve(model.identity.folderPath, linkedFolder.location), filePath),
 	);
 }
 
@@ -268,21 +268,21 @@ async function discoverSourceFiles(
 	model: WchProjectModel,
 	outputDirectory: string,
 ): Promise<ResolvedSourceFile[]> {
-	const linkedFolderNames = new Set(model.linkedFolders.map((linkedFolder) => linkedFolder.name));
+	const linkedFolderNames = new Set(model.target.linkedFolders.map((linkedFolder) => linkedFolder.name));
 	const excludedPaths = buildExcludedLogicalPaths(model, outputDirectory);
 	const sourceMap = new Map<string, ResolvedSourceFile>();
 
 	await collectSourceFiles(
-		vscode.Uri.file(model.folderPath),
+		vscode.Uri.file(model.identity.folderPath),
 		model,
 		excludedPaths,
 		sourceMap,
 		linkedFolderNames,
 	);
 
-	for (const linkedFolder of model.linkedFolders) {
+	for (const linkedFolder of model.target.linkedFolders) {
 		await collectSourceFiles(
-			vscode.Uri.file(path.resolve(model.folderPath, linkedFolder.location)),
+			vscode.Uri.file(path.resolve(model.identity.folderPath, linkedFolder.location)),
 			model,
 			excludedPaths,
 			sourceMap,
@@ -318,7 +318,7 @@ async function collectSourceFiles(
 		}
 
 		for (const [entryName, fileType] of entries) {
-			if (excludedTopLevelNames?.has(entryName) && currentDirectory.fsPath === model.folderPath) {
+			if (excludedTopLevelNames?.has(entryName) && currentDirectory.fsPath === model.identity.folderPath) {
 				continue;
 			}
 
@@ -411,8 +411,8 @@ function getSourceLanguage(fileName: string): SourceLanguage | null {
 }
 
 function resolveArtifactBaseName(model: WchProjectModel): string {
-	const projectName = model.project.name || model.baseName;
-	const rawArtifactName = model.project.artifact.name || path.basename(model.project.artifact.outputFile || '');
+	const projectName = model.identity.name || model.identity.baseName;
+	const rawArtifactName = model.build.artifact.name || path.basename(model.build.artifact.outputFile || '');
 	const normalizedArtifactName = replaceBuildVariables(rawArtifactName, projectName, projectName)
 		.replace(/\.[^/.]+$/, '')
 		.trim();
@@ -420,7 +420,7 @@ function resolveArtifactBaseName(model: WchProjectModel): string {
 		return projectName;
 	}
 
-	const outputPrefix = replaceBuildVariables(model.project.artifact.outputPrefix, projectName, normalizedArtifactName);
+	const outputPrefix = replaceBuildVariables(model.build.artifact.outputPrefix, projectName, normalizedArtifactName);
 	return `${outputPrefix}${normalizedArtifactName}`;
 }
 
@@ -429,11 +429,11 @@ function resolveMapFilePath(
 	outputDirectory: string,
 	targetBaseName: string,
 ): string | undefined {
-	if (!model.linker.generateMap) {
+	if (!model.build.linker.mapFile) {
 		return undefined;
 	}
 
-	const resolvedValue = replaceBuildVariables(model.linker.generateMap, model.project.name || model.baseName, targetBaseName)
+	const resolvedValue = replaceBuildVariables(model.build.linker.mapFile, model.identity.name || model.identity.baseName, targetBaseName)
 		.replace(/^"+|"+$/g, '')
 		.trim();
 	if (!resolvedValue) {
@@ -455,23 +455,23 @@ function replaceBuildVariables(value: string, projectName: string, artifactBaseN
 function normalizeProjectPathValue(model: WchProjectModel, value: string): string {
 	const normalizedValue = value
 		.replace(/\\/g, '/')
-		.replace(/\$\{workspace_loc:\/\$\{ProjName\}/g, model.folderPath.replace(/\\/g, '/'))
+		.replace(/\$\{workspace_loc:\/\$\{ProjName\}/g, model.identity.folderPath.replace(/\\/g, '/'))
 		.trim();
 
 	return replaceBuildVariables(
-		normalizedValue.replace(/\$\{project\}/g, model.folderPath.replace(/\\/g, '/')),
-		model.project.name || model.baseName,
+		normalizedValue.replace(/\$\{project\}/g, model.identity.folderPath.replace(/\\/g, '/')),
+		model.identity.name || model.identity.baseName,
 		resolveArtifactBaseName(model),
 	);
 }
 
 function mapLinkedFolderFileSystemPath(model: WchProjectModel, value: string): string | null {
-	if (!value.startsWith(model.folderPath.replace(/\\/g, '/'))) {
+	if (!value.startsWith(model.identity.folderPath.replace(/\\/g, '/'))) {
 		return null;
 	}
 
-	const relativePath = value.slice(model.folderPath.replace(/\\/g, '/').length).replace(/^\/+/g, '');
-	for (const linkedFolder of model.linkedFolders) {
+	const relativePath = value.slice(model.identity.folderPath.replace(/\\/g, '/').length).replace(/^\/+/g, '');
+	for (const linkedFolder of model.target.linkedFolders) {
 		const folderName = linkedFolder.name.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
 		if (!folderName) {
 			continue;
@@ -479,7 +479,7 @@ function mapLinkedFolderFileSystemPath(model: WchProjectModel, value: string): s
 
 		if (relativePath === folderName || relativePath.startsWith(`${folderName}/`)) {
 			const suffix = relativePath.slice(folderName.length).replace(/^\/+/g, '');
-			return path.resolve(model.folderPath, linkedFolder.location, suffix);
+			return path.resolve(model.identity.folderPath, linkedFolder.location, suffix);
 		}
 	}
 

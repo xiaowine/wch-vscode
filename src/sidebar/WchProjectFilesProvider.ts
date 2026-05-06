@@ -122,10 +122,10 @@ export class WchProjectFilesProvider
     model: WchProjectModel,
   ): FileTreeItem {
     const item = new FileTreeItem(
-      model.project.name || model.baseName,
+      model.identity.name || model.identity.baseName,
       vscode.TreeItemCollapsibleState.Collapsed,
     );
-    item.description = model.chip.mcu || model.baseName;
+    item.description = model.target.mcu || model.identity.baseName;
     item.iconPath = new vscode.ThemeIcon("project");
     item.loadChildren = async () => this.loadProjectFileTree(folderPath, model);
     return item;
@@ -137,12 +137,12 @@ export class WchProjectFilesProvider
     model: WchProjectModel,
   ): Promise<FileTreeItem[]> {
     // 同名映射目录会覆盖本地目录展示，避免顶层出现两个同名节点。
-    const linkedFolderNames = new Set(model.linkedFolders.map((item) => item.name));
+    const linkedFolderNames = new Set(model.target.linkedFolders.map((item) => item.name));
     const localItems = await this.readDirectoryItems(
       vscode.Uri.file(folderPath),
       linkedFolderNames,
     );
-    const linkedFolderItems = model.linkedFolders.map((item) =>
+    const linkedFolderItems = model.target.linkedFolders.map((item) =>
       this.createLinkedFolderItem(folderPath, item),
     );
 

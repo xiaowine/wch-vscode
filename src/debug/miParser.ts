@@ -151,8 +151,8 @@ class MiValueParser {
       const start = this.index;
       const name = this.parseName();
       if (name && this.text[this.index] === "=") {
-        this.index = start;
-        values.push(this.parseTupleBody());
+        this.consume("=");
+        values.push({ [name]: this.parseValue() });
       } else {
         this.index = start;
         values.push(this.parseValue());

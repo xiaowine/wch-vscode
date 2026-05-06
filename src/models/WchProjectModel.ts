@@ -3,7 +3,44 @@ export type WchLinkedFolder = {
 	location: string;
 };
 
-export type WchCompilerSettings = {
+export type WchProjectFiles = {
+	cproject: string[];
+	launch: string;
+	wvproj: string;
+};
+
+export type WchProjectIdentity = {
+	name: string;
+	baseName: string;
+	folderPath: string;
+	folderName: string;
+	files: WchProjectFiles;
+};
+
+export type WchToolchainModel = {
+	directoryName: string;
+	executablePrefix: string;
+	executables: {
+		gcc: string;
+		gpp: string;
+		gdb: string;
+		objcopy: string;
+		objdump: string;
+		size: string;
+	};
+};
+
+export type WchTargetModel = {
+	architecture: string;
+	toolchain: string;
+	mcu: string;
+	rtos: string;
+	svdPath: string;
+	debugLink: string;
+	linkedFolders: WchLinkedFolder[];
+};
+
+export type WchCompileSettings = {
 	standard: string;
 	includePaths: string[];
 	includeSystemPaths: string[];
@@ -42,166 +79,92 @@ export type WchAssemblerSettings = {
 };
 
 export type WchLinkerSettings = {
-	linkerScript: string;
+	script: string;
 	libraries: string[];
 	librarySearchPaths: string[];
 	linkerFlags: string[];
 	otherLinkerFlags: string[];
 	otherObjects: string[];
-	generateMap: string;
-	doNotUseStandardStartFiles: boolean;
-	doNotUseDefaultLibraries: boolean;
-	noStartupOrDefaultLibs: boolean;
-	removeUnusedSections: boolean;
-	printRemovedSections: boolean;
-	omitAllSymbolInformation: boolean;
-	useNewlibNano: boolean;
-	useFloatWithNanoPrintf: boolean;
-	useFloatWithNanoScanf: boolean;
-	doNotUseSyscalls: boolean;
-	crossReference: boolean;
-	printLinkMap: boolean;
-	verbose: boolean;
-	picolibc: string;
-	useWchPrintffloat: boolean;
-	useWchPrintf: boolean;
-	useIqmath: boolean;
+	mapFile: string;
 	args: string[];
 };
 
 export type WchPostBuildSettings = {
 	createFlash: boolean;
-	flashOutputFormat: string;
-	copyOnlySectionText: boolean;
-	copyOnlySectionData: boolean;
-	copyOnlySections: string[];
-	flashFlags: string[];
 	flashArgs: string[];
 	createList: boolean;
-	listFlags: string[];
 	listArgs: string[];
-	listOptions: {
-		displaySource: boolean;
-		displayAllHeaders: boolean;
-		demangleNames: boolean;
-		displayDebugInfo: boolean;
-		disassemble: boolean;
-		displayFileHeaders: boolean;
-		displayLineNumbers: boolean;
-		displayRelocationInfo: boolean;
-		displaySymbols: boolean;
-		wideLines: boolean;
-	};
 	printSize: boolean;
-	sizeFormat: string;
-	sizeFlags: string[];
 	sizeArgs: string[];
-	sizeOptions: {
-		hex: boolean;
-		showTotals: boolean;
-	};
 };
 
-export type WchResolvedToolchain = {
-	directoryName: string;
-	executablePrefix: string;
-	executables: {
-		gcc: string;
-		gpp: string;
-		objcopy: string;
-		objdump: string;
-		size: string;
-	};
+export type WchBuildArtifact = {
+	name: string;
+	extension: string;
+	outputPrefix: string;
+	outputFile: string;
 };
 
-// 汇总后的项目模型，只保留扩展后续真正会用到的核心信息。
-export type WchProjectModel = {
-	baseName: string;
-	folderPath: string;
-	folderName: string;
-	linkedFolders: WchLinkedFolder[];
-	files: {
-		cproject: string[];
-		launch: string;
-		wvproj: string;
+export type WchBuildModel = {
+	configName: string;
+	parallelizationNumber: string;
+	stopOnFirstBuildError: boolean;
+	preScript: string;
+	postScript: string;
+	toolchainName: string;
+	commandPrefix: string;
+	compilerPath: string;
+	toolchain: WchToolchainModel;
+	artifact: WchBuildArtifact;
+	targetArchitecture: string;
+	targetAbi: string;
+	riscvExtensions: string[];
+	architectureArgs: string[];
+	cStandard: string;
+	cppStandard: string;
+	includePaths: string[];
+	includeSystemPaths: string[];
+	includeFiles: string[];
+	definedSymbols: string[];
+	otherCompilerFlags: string[];
+	sourceExcludes: string[];
+	compile: {
+		assembler: WchAssemblerSettings;
+		c: WchCompileSettings;
+		cpp: WchCompileSettings;
 	};
-	project: {
-		name: string;
-		projectType: string;
-		architecture: string;
-		artifact: {
-			name: string;
-			extension: string;
-			outputPrefix: string;
-			outputFile: string;
-		};
-	};
-	chip: {
-		vendor: string;
-		series: string;
-		mcu: string;
-		rtos: string;
-		toolchain: string;
-		debugLink: string;
-		svdPath: string;
-	};
-	resolvedToolchain: WchResolvedToolchain;
-	build: {
-		configName: string;
-		parallelizationNumber: string;
-		stopOnFirstBuildError: boolean;
-		preScript: string;
-		postScript: string;
-		toolchainName: string;
-		commandPrefix: string;
-		compilerPath: string;
-		targetArchitecture: string;
-		targetAbi: string;
-		riscvExtensions: string[];
-		architectureArgs: string[];
-		optimizationLevel: string;
-		functionSections: boolean;
-		dataSections: boolean;
-		commonOptimizationFlags: string[];
-		commonWarningFlags: string[];
-		commonDebuggingFlags: string[];
-		cStandard: string;
-		cppStandard: string;
-		includePaths: string[];
-		includeSystemPaths: string[];
-		includeFiles: string[];
-		definedSymbols: string[];
-		otherCompilerFlags: string[];
-		linkerScript: string;
-		libraries: string[];
-		librarySearchPaths: string[];
-		sourceExcludes: string[];
-	};
-	assembler: WchAssemblerSettings;
-	c: WchCompilerSettings;
-	cpp: WchCompilerSettings;
 	linker: WchLinkerSettings;
 	postBuild: WchPostBuildSettings;
-	debug: {
-		programName: string;
-		gdbExecutable: string;
-		openOcdExecutable: string;
-		openOcdConfigOptions: string[];
-		host: string;
-		gdbPort: number;
-		telnetPort: number;
-		tclPort: number;
-		startupCommands: string[];
-		stopAt: string;
-		firstResetType: string;
-		secondResetType: string;
-	};
-	flash: {
-		targetPath: string;
-		address: string;
-		erase: boolean;
-		program: boolean;
-		verify: boolean;
-		reset: boolean;
-	};
+};
+
+export type WchDebugModel = {
+	programName: string;
+	gdbExecutable: string;
+	openOcdExecutable: string;
+	openOcdConfigOptions: string[];
+	host: string;
+	gdbPort: number;
+	telnetPort: number;
+	tclPort: number;
+	startupCommands: string[];
+	stopAt: string;
+	firstResetType: string;
+	secondResetType: string;
+};
+
+export type WchFlashModel = {
+	targetPath: string;
+	address: string;
+	erase: boolean;
+	program: boolean;
+	verify: boolean;
+	reset: boolean;
+};
+
+export type WchProjectModel = {
+	identity: WchProjectIdentity;
+	target: WchTargetModel;
+	build: WchBuildModel;
+	debug: WchDebugModel;
+	flash: WchFlashModel;
 };

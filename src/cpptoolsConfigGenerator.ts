@@ -58,7 +58,7 @@ export async function ensureCppToolsConfigFileIfMissing(
 
 // 生成单个项目对应的 cpptools 配置。
 async function buildCppToolsConfiguration(model: WchProjectModel): Promise<CppToolsConfiguration> {
-	const linkedFolderPaths = model.linkedFolders.map((value) => normalizeLinkedFolderLocation(value.location));
+	const linkedFolderPaths = model.target.linkedFolders.map((value) => normalizeLinkedFolderLocation(value.location));
 	const linkedFolderBrowsePaths = linkedFolderPaths.map((value) => appendRecursiveGlob(value));
 	const includePath = uniqueStrings([
 		'${workspaceFolder}/**',
@@ -76,7 +76,7 @@ async function buildCppToolsConfiguration(model: WchProjectModel): Promise<CppTo
 	const compilerPath = resolveCompilerPathFromSetting(model);
 
 	return {
-		name: model.project.name || model.baseName,
+		name: model.identity.name || model.identity.baseName,
 		compilerPath,
 		compilerArgs: compilerArgs.length > 0 ? compilerArgs : undefined,
 		cStandard: model.build.cStandard || undefined,
@@ -97,12 +97,12 @@ function normalizeWorkspacePath(model: WchProjectModel, value: string): string {
 		.replace(/\\/g, '/')
 		.replace(/\$\{workspace_loc:\/\$\{ProjName\}/g, '${workspaceFolder}');
 
-	const mappedProjectPath = mapProjectVirtualPath(model.linkedFolders, normalizedValue);
+	const mappedProjectPath = mapProjectVirtualPath(model.target.linkedFolders, normalizedValue);
 	if (mappedProjectPath) {
 		return mappedProjectPath;
 	}
 
-	const replacedProjectName = normalizedValue.replace(/\$\{ProjName\}/g, model.folderName);
+	const replacedProjectName = normalizedValue.replace(/\$\{ProjName\}/g, model.identity.folderName);
 	const replacedProjectPath = replacedProjectName.replace(/\$\{project\}/g, '${workspaceFolder}');
 
 	if (isAbsoluteOrVariablePath(replacedProjectPath)) {

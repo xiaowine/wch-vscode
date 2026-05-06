@@ -7,6 +7,7 @@ import {
   resolveOpenOcdPaths,
   type ResolvedOpenOcdPaths,
 } from "../build/buildShared";
+import { logDebug } from "./debugLog";
 
 export type WchRiscvDebugLaunchConfig = {
   type: "wch-riscv";
@@ -22,6 +23,8 @@ export type WchRiscvDebugLaunchConfig = {
   host: string;
   gdbPort: number;
   startupCommands: string[];
+  stopAt: string;
+  wvprojPath: string;
 };
 
 export async function buildWchRiscvDebugLaunchConfig(
@@ -37,18 +40,26 @@ export async function buildWchRiscvDebugLaunchConfig(
   const openOcdPath = resolveConfiguredOpenOcdExecutable(project, openOcdPaths);
   const openOcdArgs = buildOpenOcdServerArgs(project, openOcdPaths);
   const elfPath = project.elfPath;
+  const projectName = project.model.identity.name || project.model.identity.baseName;
+
+  logDebug(`Building debug launch config for ${projectName}`);
+  logDebug(`GDB path: ${gdbPath}`);
+  logDebug(`OpenOCD path: ${openOcdPath}`);
+  logDebug(`OpenOCD args: ${openOcdArgs.join(" ")}`);
+  logDebug(`GDB endpoint: ${project.model.debug.host || "localhost"}:${project.model.debug.gdbPort || 3333}`);
+  logDebug(`Stop at: ${project.model.debug.stopAt || "<disabled>"}`);
+  logDebug(`WVProj path: ${project.model.identity.files.wvproj}`);
 
   await assertFileExists(gdbPath, `MRS 安装路径无效，未找到 gdb.exe：${gdbPath}`);
   await assertFileExists(openOcdPath, `MRS 安装路径无效，未找到 openocd.exe：${openOcdPath}`);
   await assertFileExists(elfPath, `未找到 ELF 文件：${elfPath}`);
 
-  const projectName = project.model.project.name || project.model.baseName;
   return {
     type: "wch-riscv",
     request: "launch",
     name: `Debug ${projectName}`,
     projectName,
-    cwd: project.model.folderPath,
+    cwd: project.model.identity.folderPath,
     elfPath,
     gdbPath,
     openOcdPath,
@@ -57,6 +68,8 @@ export async function buildWchRiscvDebugLaunchConfig(
     host: project.model.debug.host || "localhost",
     gdbPort: project.model.debug.gdbPort || 3333,
     startupCommands: project.model.debug.startupCommands,
+    stopAt: project.model.debug.stopAt,
+    wvprojPath: project.model.identity.files.wvproj,
   };
 }
 

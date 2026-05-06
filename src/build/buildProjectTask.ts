@@ -28,7 +28,7 @@ export function getCurrentBuildTargetTooltip(
   }
 
   const { model } = resolution.target;
-  return `${actionLabel} ${model.project.name || model.baseName}`;
+  return `${actionLabel} ${model.identity.name || model.identity.baseName}`;
 }
 
 export async function buildCurrentProject(
@@ -137,7 +137,7 @@ function resolveBuildOutputDirectory(
   }
 
   const { model } = resolution.target;
-  if (model.chip.toolchain.toUpperCase() !== "RISC-V") {
+  if (model.target.toolchain.toUpperCase() !== "RISC-V") {
     throw new Error("不支持，仅支持 RISC-V 工程");
   }
 
@@ -146,7 +146,7 @@ function resolveBuildOutputDirectory(
     throw new Error("当前工程缺少 build.configName，无法定位构建目录");
   }
 
-  return path.join(model.folderPath, outputDirectoryName);
+  return path.join(model.identity.folderPath, outputDirectoryName);
 }
 
 function createBuildTask(
@@ -167,11 +167,11 @@ function createBuildTask(
     {
       type: "wchBuild",
       workspaceFolder: project.workspaceFolder.name,
-      projectName: project.model.project.name || project.model.baseName,
+      projectName: project.model.identity.name || project.model.identity.baseName,
       action: taskLabelPrefix,
     },
     project.workspaceFolder,
-    `${taskLabelPrefix} ${project.model.project.name || project.model.baseName}`,
+    `${taskLabelPrefix} ${project.model.identity.name || project.model.identity.baseName}`,
     "wch-vscode",
     execution,
     [],

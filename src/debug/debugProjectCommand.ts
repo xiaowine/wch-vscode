@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
 import { buildCurrentProjectAndWait } from "../build/buildProjectTask";
 import { resolveBuildProjectForExecution, resolveCurrentBuildTarget } from "../build/buildProjectResolver";
-import { refreshWchProjectState } from "../projectDetection";
 import { buildWchRiscvDebugLaunchConfig } from "./debugConfig";
+import { logDebug, showDebugLog } from "./debugLog";
 
 export const DEBUG_PROJECT_COMMAND = "wchVscode.debugProject";
 
@@ -15,24 +15,33 @@ export function getCurrentDebugTargetTooltip(
   }
 
   const { model } = resolution.target;
-  return `Debug ${model.project.name || model.baseName}`;
+  return `Debug ${model.identity.name || model.identity.baseName}`;
 }
 
 export async function debugCurrentProject(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
 ): Promise<boolean> {
-  await refreshWchProjectState();
+  showDebugLog(true);
+  logDebug("Debug command requested");
   const buildSucceeded = await buildCurrentProjectAndWait(editor, false);
   if (!buildSucceeded) {
+    logDebug("Debug command stopped because build failed");
     return false;
   }
 
   try {
     const project = await resolveBuildProjectForExecution(editor);
+    logDebug(`Resolved debug project: ${project.model.identity.name || project.model.identity.baseName}`);
+    logDebug(`ELF: ${project.elfPath}`);
     const launchConfig = await buildWchRiscvDebugLaunchConfig(project);
-    return await vscode.debug.startDebugging(project.workspaceFolder, launchConfig);
+    logDebug(`Starting VS Code debug session: ${launchConfig.name}`);
+    const started = await vscode.debug.startDebugging(project.workspaceFolder, launchConfig);
+    logDebug(`VS Code debug session start result: ${started}`);
+    return started;
   } catch (error) {
-    void vscode.window.showErrorMessage(asErrorMessage(error));
+    const message = asErrorMessage(error);
+    logDebug(`Debug command failed: ${message}`);
+    void vscode.window.showErrorMessage(message);
     return false;
   }
 }

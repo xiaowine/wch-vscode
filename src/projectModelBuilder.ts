@@ -1,7 +1,7 @@
 import type {
   WchLinkedFolder,
   WchProjectModel,
-  WchResolvedToolchain,
+  WchToolchainModel,
 } from "./models/WchProjectModel";
 import {
   getConfiguredMounRiverStudioPath,
@@ -15,6 +15,12 @@ import type {
   ParsedProjectFile,
   ParsedWchProject,
 } from "./projectState";
+
+type LaunchAttributeMaps = {
+  strings: Map<string, string>;
+  ints: Map<string, number>;
+  booleans: Map<string, boolean>;
+};
 
 // 从已解析的项目文件中提炼出精简后的业务模型。
 export function buildWchProjectModels(
@@ -112,7 +118,7 @@ function buildWchProjectModel(
       launchAttributes.strings.get("org.eclipse.cdt.dsf.gdb.DEBUG_NAME"),
     ) ??
     "";
-  const resolvedToolchain = resolveToolchainMetadata(gdbExecutable);
+  const toolchainMetadata = resolveToolchainMetadata(gdbExecutable);
   const rawOpenOcdExecutable =
     getString(openOcdCfg?.executable) ??
     getString(
@@ -270,20 +276,44 @@ function buildWchProjectModel(
   const sizeFlags = splitSpaceFlags(getString(printSize?.other_flags));
 
   return {
-    baseName: pair.baseName,
-    folderPath: project.folderPath,
-    folderName: project.folderName,
-    // linkedFolders 表示 MRS 工程里额外挂进来的目录，后续会用于补充 VS Code 的索引路径。
-    linkedFolders: extractLinkedFolders(basic?.linkedFolders),
-    files: {
-      cproject: project.cprojectFiles.map((file) => file.filePath),
-      launch: pair.launch.filePath,
-      wvproj: pair.wvproj.filePath,
-    },
-    project: {
+    identity: {
       name: getString(basic?.projectName) ?? pair.baseName,
-      projectType: getString(basic?.projectType) ?? "",
+      baseName: pair.baseName,
+      folderPath: project.folderPath,
+      folderName: project.folderName,
+      files: {
+        cproject: project.cprojectFiles.map((file) => file.filePath),
+        launch: pair.launch.filePath,
+        wvproj: pair.wvproj.filePath,
+      },
+    },
+    target: {
       architecture: getString(basic?.architecture) ?? "",
+      toolchain: toolchain ?? "",
+      mcu: getString(chipInfo?.mcu) ?? "",
+      rtos: getString(chipInfo?.rtos) ?? "",
+      debugLink: getString(chipInfo?.link) ?? "",
+      svdPath:
+        getString(debugConfigurations?.svdpath) ??
+        getString(
+          launchAttributes.strings.get("com.mounriver.debug.gdbjtag.svdPath"),
+        ) ??
+        "",
+      // linkedFolders 表示 MRS 工程里额外挂进来的目录，后续会用于补充 VS Code 的索引路径。
+      linkedFolders: extractLinkedFolders(basic?.linkedFolders),
+    },
+    build: {
+      configName: getString(buildConfiguration?.name) ?? "",
+      parallelizationNumber:
+        getString(buildConfiguration?.parallelizationNumber) ?? "",
+      stopOnFirstBuildError:
+        getBoolean(buildConfiguration?.stop_on_first_build_error) ?? true,
+      preScript: getString(buildConfiguration?.pre_script) ?? "",
+      postScript: getString(buildConfiguration?.post_script) ?? "",
+      toolchainName: cprojectInfo.toolchainName,
+      commandPrefix: cprojectInfo.commandPrefix,
+      compilerPath: buildCompilerPath(cprojectInfo.commandPrefix),
+      toolchain: toolchainMetadata,
       artifact: {
         name: getString(buildArtifact?.artifact_name) ?? "",
         extension: getString(buildArtifact?.artifact_extension) ?? "",
@@ -298,43 +328,10 @@ function buildWchProjectModel(
           ) ??
           "",
       },
-    },
-    chip: {
-      vendor: getString(chipInfo?.vendor) ?? "",
-      series: getString(chipInfo?.series) ?? "",
-      mcu: getString(chipInfo?.mcu) ?? "",
-      rtos: getString(chipInfo?.rtos) ?? "",
-      toolchain: toolchain ?? "",
-      debugLink: getString(chipInfo?.link) ?? "",
-      svdPath:
-        getString(debugConfigurations?.svdpath) ??
-        getString(
-          launchAttributes.strings.get("com.mounriver.debug.gdbjtag.svdPath"),
-        ) ??
-        "",
-    },
-    resolvedToolchain,
-    build: {
-      configName: getString(buildConfiguration?.name) ?? "",
-      parallelizationNumber:
-        getString(buildConfiguration?.parallelizationNumber) ?? "",
-      stopOnFirstBuildError:
-        getBoolean(buildConfiguration?.stop_on_first_build_error) ?? true,
-      preScript: getString(buildConfiguration?.pre_script) ?? "",
-      postScript: getString(buildConfiguration?.post_script) ?? "",
-      toolchainName: cprojectInfo.toolchainName,
-      commandPrefix: cprojectInfo.commandPrefix,
-      compilerPath: buildCompilerPath(cprojectInfo.commandPrefix),
       targetArchitecture,
       targetAbi,
       riscvExtensions,
       architectureArgs,
-      optimizationLevel,
-      functionSections,
-      dataSections,
-      commonOptimizationFlags,
-      commonWarningFlags,
-      commonDebuggingFlags,
       cStandard,
       cppStandard,
       includePaths: getStringArray(cIncludes?.include_paths),
@@ -342,255 +339,173 @@ function buildWchProjectModel(
       includeFiles: getStringArray(cIncludes?.include_files),
       definedSymbols: getStringArray(cPreprocessor?.defined_symbols),
       otherCompilerFlags: buildOtherCompilerFlags,
-      linkerScript: getFirstString(linkerGeneral?.scriptFiles),
-      libraries: getStringArray(linkerLibraries?.libraries),
-      librarySearchPaths: getStringArray(linkerLibraries?.library_search_path),
       sourceExcludes:
         cprojectInfo.sourceExcludes.length > 0
           ? cprojectInfo.sourceExcludes
           : getStringArray(buildConfiguration?.excludeResources),
-    },
-    assembler: {
-      usePreprocessor: assemblerUsePreprocessor,
-      doNotSearchSystemDirectories: assemblerDoNotSearchSystemDirectories,
-      preprocessOnly: assemblerPreprocessOnly,
-      includePaths: getStringArray(assemblerIncludes?.include_paths),
-      includeSystemPaths: getStringArray(
-        assemblerIncludes?.include_system_paths,
-      ),
-      includeFiles: getStringArray(assemblerIncludes?.include_files),
-      definedSymbols: getStringArray(assemblerPreprocessor?.defined_symbols),
-      undefinedSymbols: assemblerUndefinedSymbols,
-      assemblerFlags,
-      generateAssemblerListing: assemblerGenerateAssemblerListing,
-      saveTemporaryFiles: assemblerSaveTemporaryFiles,
-      verbose: assemblerVerbose,
-      otherAssemblerFlags: assemblerOtherFlags,
-      warningFlags: assemblerWarningFlags,
-      args: uniqueStrings([
-        ...architectureArgs,
-        ...buildAssemblerPreprocessorArgs(
-          assemblerUsePreprocessor,
-          assemblerDoNotSearchSystemDirectories,
-          assemblerPreprocessOnly,
-          assemblerUndefinedSymbols,
-        ),
-        ...buildAssemblerMiscArgs(
+      compile: {
+        assembler: {
+          usePreprocessor: assemblerUsePreprocessor,
+          doNotSearchSystemDirectories: assemblerDoNotSearchSystemDirectories,
+          preprocessOnly: assemblerPreprocessOnly,
+          includePaths: getStringArray(assemblerIncludes?.include_paths),
+          includeSystemPaths: getStringArray(assemblerIncludes?.include_system_paths),
+          includeFiles: getStringArray(assemblerIncludes?.include_files),
+          definedSymbols: getStringArray(assemblerPreprocessor?.defined_symbols),
+          undefinedSymbols: assemblerUndefinedSymbols,
           assemblerFlags,
-          assemblerGenerateAssemblerListing,
-          assemblerSaveTemporaryFiles,
-          assemblerVerbose,
-        ),
-        ...assemblerWarningFlags,
-        ...assemblerOtherFlags,
-      ]),
-    },
-    c: {
-      standard: cStandard,
-      includePaths: getStringArray(cIncludes?.include_paths),
-      includeSystemPaths: getStringArray(cIncludes?.include_system_paths),
-      includeFiles: getStringArray(cIncludes?.include_files),
-      definedSymbols: getStringArray(cPreprocessor?.defined_symbols),
-      undefinedSymbols: cUndefinedSymbols,
-      doNotSearchSystemDirectories: cPreprocessorDoNotSearchSystemDirectories,
-      doNotSearchSystemCppDirectories: false,
-      preprocessOnly: cPreprocessOnly,
-      generateAssemblerListing: cGenerateAssemblerListing,
-      saveTemporaryFiles: cSaveTemporaryFiles,
-      verbose: cVerbose,
-      optimizationFlags: cOptimizationFlags,
-      warningFlags: uniqueStrings([
-        ...commonWarningFlags,
-        ...cSpecificWarningFlags,
-        ...cWarningFlags,
-      ]),
-      debuggingFlags: cDebuggingFlags,
-      otherCompilerFlags: cOtherCompilerFlags,
-      args: uniqueStrings([
-        ...architectureArgs,
-        ...buildCommonCompilerArgs(
-          optimizationLevel,
-          functionSections,
-          dataSections,
-        ),
-        ...commonOptimizationFlags,
-        ...(cStandard ? [`-std=${cStandard}`] : []),
-        ...cOptimizationFlags,
-        ...buildCompilerPreprocessorArgs(
-          cPreprocessorDoNotSearchSystemDirectories,
-          false,
-          cPreprocessOnly,
-          cUndefinedSymbols,
-        ),
-        ...uniqueStrings([
-          ...commonWarningFlags,
-          ...cSpecificWarningFlags,
-          ...cWarningFlags,
-        ]),
-        ...cDebuggingFlags,
-        ...buildCompilerMiscArgs(
-          cGenerateAssemblerListing,
-          cSaveTemporaryFiles,
-          cVerbose,
-        ),
-        ...buildOtherCompilerFlags,
-        ...cOtherCompilerFlags,
-      ]),
-    },
-    cpp: {
-      standard: cppStandard,
-      includePaths: getStringArray(cppIncludes?.include_paths),
-      includeSystemPaths: getStringArray(cppIncludes?.include_system_paths),
-      includeFiles: getStringArray(cppIncludes?.include_files),
-      definedSymbols: getStringArray(cppPreprocessor?.defined_symbols),
-      undefinedSymbols: cppUndefinedSymbols,
-      doNotSearchSystemDirectories: cppPreprocessorDoNotSearchSystemDirectories,
-      doNotSearchSystemCppDirectories: cppDoNotSearchSystemCppDirectories,
-      preprocessOnly: cppPreprocessOnly,
-      generateAssemblerListing: cppGenerateAssemblerListing,
-      saveTemporaryFiles: cppSaveTemporaryFiles,
-      verbose: cppVerbose,
-      optimizationFlags: uniqueStrings([
-        ...cppSpecificOptimizationFlags,
-        ...cppOptimizationFlags,
-      ]),
-      warningFlags: uniqueStrings([
-        ...commonWarningFlags,
-        ...cppSpecificWarningFlags,
-        ...cppWarningFlags,
-      ]),
-      debuggingFlags: cppDebuggingFlags,
-      otherCompilerFlags: cppOtherCompilerFlags,
-      args: uniqueStrings([
-        ...architectureArgs,
-        ...buildCommonCompilerArgs(
-          optimizationLevel,
-          functionSections,
-          dataSections,
-        ),
-        ...commonOptimizationFlags,
-        ...(cppStandard ? [`-std=${cppStandard}`] : []),
-        ...cppSpecificOptimizationFlags,
-        ...cppOptimizationFlags,
-        ...buildCompilerPreprocessorArgs(
-          cppPreprocessorDoNotSearchSystemDirectories,
-          cppDoNotSearchSystemCppDirectories,
-          cppPreprocessOnly,
-          cppUndefinedSymbols,
-        ),
-        ...uniqueStrings([
-          ...commonWarningFlags,
-          ...cppSpecificWarningFlags,
-          ...cppWarningFlags,
-        ]),
-        ...cppDebuggingFlags,
-        ...buildCompilerMiscArgs(
-          cppGenerateAssemblerListing,
-          cppSaveTemporaryFiles,
-          cppVerbose,
-        ),
-        ...buildOtherCompilerFlags,
-        ...cppOtherCompilerFlags,
-      ]),
-    },
-    linker: {
-      linkerScript: getFirstString(linkerGeneral?.scriptFiles),
-      libraries: getStringArray(linkerLibraries?.libraries),
-      librarySearchPaths: getStringArray(linkerLibraries?.library_search_path),
-      linkerFlags,
-      otherLinkerFlags,
-      otherObjects: getStringArray(linkerMisc?.other_objects),
-      generateMap: getString(linkerMisc?.generate_map) ?? "",
-      doNotUseStandardStartFiles: linkerConfig.doNotUseStandardStartFiles,
-      doNotUseDefaultLibraries: linkerConfig.doNotUseDefaultLibraries,
-      noStartupOrDefaultLibs: linkerConfig.noStartupOrDefaultLibs,
-      removeUnusedSections: linkerConfig.removeUnusedSections,
-      printRemovedSections: linkerConfig.printRemovedSections,
-      omitAllSymbolInformation: linkerConfig.omitAllSymbolInformation,
-      useNewlibNano: linkerConfig.useNewlibNano,
-      useFloatWithNanoPrintf: linkerConfig.useFloatWithNanoPrintf,
-      useFloatWithNanoScanf: linkerConfig.useFloatWithNanoScanf,
-      doNotUseSyscalls: linkerConfig.doNotUseSyscalls,
-      crossReference: getBoolean(linkerMisc?.cross_reference) ?? false,
-      printLinkMap: getBoolean(linkerMisc?.print_link_map) ?? false,
-      verbose: getBoolean(linkerMisc?.verbose) ?? false,
-      picolibc: getString(linkerMisc?.picolibc) ?? "",
-      useWchPrintffloat: getBoolean(linkerMisc?.use_wch_printffloat) ?? false,
-      useWchPrintf: getBoolean(linkerMisc?.use_wch_printf) ?? false,
-      useIqmath: getBoolean(linkerMisc?.use_iqmath) ?? false,
-      args: uniqueStrings([
-        ...architectureArgs,
-        ...buildLinkBehaviorArgs(linkerConfig),
-        ...buildLinkMiscArgs(
-          getBoolean(optimization?.link_time_optimizer) ?? false,
-          getBoolean(debugging?.generate_prof_information) ?? false,
-          getBoolean(debugging?.generate_gprof_information) ?? false,
-          splitSpaceFlags(getString(debugging?.other_debugging_flags)),
-          getBoolean(linkerMisc?.cross_reference) ?? false,
-          getBoolean(linkerMisc?.print_link_map) ?? false,
-          getBoolean(linkerMisc?.verbose) ?? false,
-          getString(linkerMisc?.picolibc) ?? "",
-        ),
-        ...linkerFlags,
-        ...otherLinkerFlags,
-      ]),
-    },
-    postBuild: {
-      createFlash: createFlashEnabled,
-      flashOutputFormat,
-      copyOnlySectionText: flashCopyOnlySectionText,
-      copyOnlySectionData: flashCopyOnlySectionData,
-      copyOnlySections: flashCopyOnlySections,
-      flashFlags,
-      flashArgs: buildFlashArgs(
-        flashOutputFormat,
-        flashCopyOnlySectionText,
-        flashCopyOnlySectionData,
-        flashCopyOnlySections,
-        flashFlags,
-      ),
-      createList: createListEnabled,
-      listFlags,
-      listArgs: buildListArgs(
-        getBoolean(createList?.display_all_headers) ?? false,
-        getBoolean(createList?.disassemble) ?? false,
-        getBoolean(createList?.display_source) ?? false,
-        getBoolean(createList?.demangle_names) ?? false,
-        getBoolean(createList?.display_debug_info) ?? false,
-        getBoolean(createList?.display_file_headers) ?? false,
-        getBoolean(createList?.display_line_numbers) ?? false,
-        getBoolean(createList?.display_relocation_info) ?? false,
-        getBoolean(createList?.display_symbols) ?? false,
-        getBoolean(createList?.wide_lines) ?? false,
-        listFlags,
-      ),
-      listOptions: {
-        displaySource: getBoolean(createList?.display_source) ?? false,
-        displayAllHeaders: getBoolean(createList?.display_all_headers) ?? false,
-        demangleNames: getBoolean(createList?.demangle_names) ?? false,
-        displayDebugInfo: getBoolean(createList?.display_debug_info) ?? false,
-        disassemble: getBoolean(createList?.disassemble) ?? false,
-        displayFileHeaders:
-          getBoolean(createList?.display_file_headers) ?? false,
-        displayLineNumbers:
-          getBoolean(createList?.display_line_numbers) ?? false,
-        displayRelocationInfo:
-          getBoolean(createList?.display_relocation_info) ?? false,
-        displaySymbols: getBoolean(createList?.display_symbols) ?? false,
-        wideLines: getBoolean(createList?.wide_lines) ?? false,
+          generateAssemblerListing: assemblerGenerateAssemblerListing,
+          saveTemporaryFiles: assemblerSaveTemporaryFiles,
+          verbose: assemblerVerbose,
+          otherAssemblerFlags: assemblerOtherFlags,
+          warningFlags: assemblerWarningFlags,
+          args: uniqueStrings([
+            ...architectureArgs,
+            ...buildAssemblerPreprocessorArgs(
+              assemblerUsePreprocessor,
+              assemblerDoNotSearchSystemDirectories,
+              assemblerPreprocessOnly,
+              assemblerUndefinedSymbols,
+            ),
+            ...buildAssemblerMiscArgs(
+              assemblerFlags,
+              assemblerGenerateAssemblerListing,
+              assemblerSaveTemporaryFiles,
+              assemblerVerbose,
+            ),
+            ...assemblerWarningFlags,
+            ...assemblerOtherFlags,
+          ]),
+        },
+        c: {
+          standard: cStandard,
+          includePaths: getStringArray(cIncludes?.include_paths),
+          includeSystemPaths: getStringArray(cIncludes?.include_system_paths),
+          includeFiles: getStringArray(cIncludes?.include_files),
+          definedSymbols: getStringArray(cPreprocessor?.defined_symbols),
+          undefinedSymbols: cUndefinedSymbols,
+          doNotSearchSystemDirectories: cPreprocessorDoNotSearchSystemDirectories,
+          doNotSearchSystemCppDirectories: false,
+          preprocessOnly: cPreprocessOnly,
+          generateAssemblerListing: cGenerateAssemblerListing,
+          saveTemporaryFiles: cSaveTemporaryFiles,
+          verbose: cVerbose,
+          optimizationFlags: cOptimizationFlags,
+          warningFlags: uniqueStrings([...commonWarningFlags, ...cSpecificWarningFlags, ...cWarningFlags]),
+          debuggingFlags: cDebuggingFlags,
+          otherCompilerFlags: cOtherCompilerFlags,
+          args: uniqueStrings([
+            ...architectureArgs,
+            ...buildCommonCompilerArgs(optimizationLevel, functionSections, dataSections),
+            ...commonOptimizationFlags,
+            ...(cStandard ? [`-std=${cStandard}`] : []),
+            ...cOptimizationFlags,
+            ...buildCompilerPreprocessorArgs(
+              cPreprocessorDoNotSearchSystemDirectories,
+              false,
+              cPreprocessOnly,
+              cUndefinedSymbols,
+            ),
+            ...uniqueStrings([...commonWarningFlags, ...cSpecificWarningFlags, ...cWarningFlags]),
+            ...cDebuggingFlags,
+            ...buildCompilerMiscArgs(cGenerateAssemblerListing, cSaveTemporaryFiles, cVerbose),
+            ...buildOtherCompilerFlags,
+            ...cOtherCompilerFlags,
+          ]),
+        },
+        cpp: {
+          standard: cppStandard,
+          includePaths: getStringArray(cppIncludes?.include_paths),
+          includeSystemPaths: getStringArray(cppIncludes?.include_system_paths),
+          includeFiles: getStringArray(cppIncludes?.include_files),
+          definedSymbols: getStringArray(cppPreprocessor?.defined_symbols),
+          undefinedSymbols: cppUndefinedSymbols,
+          doNotSearchSystemDirectories: cppPreprocessorDoNotSearchSystemDirectories,
+          doNotSearchSystemCppDirectories: cppDoNotSearchSystemCppDirectories,
+          preprocessOnly: cppPreprocessOnly,
+          generateAssemblerListing: cppGenerateAssemblerListing,
+          saveTemporaryFiles: cppSaveTemporaryFiles,
+          verbose: cppVerbose,
+          optimizationFlags: uniqueStrings([...cppSpecificOptimizationFlags, ...cppOptimizationFlags]),
+          warningFlags: uniqueStrings([...commonWarningFlags, ...cppSpecificWarningFlags, ...cppWarningFlags]),
+          debuggingFlags: cppDebuggingFlags,
+          otherCompilerFlags: cppOtherCompilerFlags,
+          args: uniqueStrings([
+            ...architectureArgs,
+            ...buildCommonCompilerArgs(optimizationLevel, functionSections, dataSections),
+            ...commonOptimizationFlags,
+            ...(cppStandard ? [`-std=${cppStandard}`] : []),
+            ...cppSpecificOptimizationFlags,
+            ...cppOptimizationFlags,
+            ...buildCompilerPreprocessorArgs(
+              cppPreprocessorDoNotSearchSystemDirectories,
+              cppDoNotSearchSystemCppDirectories,
+              cppPreprocessOnly,
+              cppUndefinedSymbols,
+            ),
+            ...uniqueStrings([...commonWarningFlags, ...cppSpecificWarningFlags, ...cppWarningFlags]),
+            ...cppDebuggingFlags,
+            ...buildCompilerMiscArgs(cppGenerateAssemblerListing, cppSaveTemporaryFiles, cppVerbose),
+            ...buildOtherCompilerFlags,
+            ...cppOtherCompilerFlags,
+          ]),
+        },
       },
-      printSize: printSizeEnabled,
-      sizeFormat,
-      sizeFlags,
-      sizeArgs: buildSizeArgs(
-        sizeFormat,
-        getBoolean(printSize?.hex) ?? false,
-        getBoolean(printSize?.show_totals) ?? false,
-        sizeFlags,
-      ),
-      sizeOptions: {
-        hex: getBoolean(printSize?.hex) ?? false,
-        showTotals: getBoolean(printSize?.show_totals) ?? false,
+      linker: {
+        script: getFirstString(linkerGeneral?.scriptFiles),
+        libraries: getStringArray(linkerLibraries?.libraries),
+        librarySearchPaths: getStringArray(linkerLibraries?.library_search_path),
+        linkerFlags,
+        otherLinkerFlags,
+        otherObjects: getStringArray(linkerMisc?.other_objects),
+        mapFile: getString(linkerMisc?.generate_map) ?? "",
+        args: uniqueStrings([
+          ...architectureArgs,
+          ...buildLinkBehaviorArgs(linkerConfig),
+          ...buildLinkMiscArgs(
+            getBoolean(optimization?.link_time_optimizer) ?? false,
+            getBoolean(debugging?.generate_prof_information) ?? false,
+            getBoolean(debugging?.generate_gprof_information) ?? false,
+            splitSpaceFlags(getString(debugging?.other_debugging_flags)),
+            getBoolean(linkerMisc?.cross_reference) ?? false,
+            getBoolean(linkerMisc?.print_link_map) ?? false,
+            getBoolean(linkerMisc?.verbose) ?? false,
+            getString(linkerMisc?.picolibc) ?? "",
+          ),
+          ...linkerFlags,
+          ...otherLinkerFlags,
+        ]),
+      },
+      postBuild: {
+        createFlash: createFlashEnabled,
+        flashArgs: buildFlashArgs(
+          flashOutputFormat,
+          flashCopyOnlySectionText,
+          flashCopyOnlySectionData,
+          flashCopyOnlySections,
+          flashFlags,
+        ),
+        createList: createListEnabled,
+        listArgs: buildListArgs(
+          getBoolean(createList?.display_all_headers) ?? false,
+          getBoolean(createList?.disassemble) ?? false,
+          getBoolean(createList?.display_source) ?? false,
+          getBoolean(createList?.demangle_names) ?? false,
+          getBoolean(createList?.display_debug_info) ?? false,
+          getBoolean(createList?.display_file_headers) ?? false,
+          getBoolean(createList?.display_line_numbers) ?? false,
+          getBoolean(createList?.display_relocation_info) ?? false,
+          getBoolean(createList?.display_symbols) ?? false,
+          getBoolean(createList?.wide_lines) ?? false,
+          listFlags,
+        ),
+        printSize: printSizeEnabled,
+        sizeArgs: buildSizeArgs(
+          sizeFormat,
+          getBoolean(printSize?.hex) ?? false,
+          getBoolean(printSize?.show_totals) ?? false,
+          sizeFlags,
+        ),
       },
     },
     debug: {
@@ -639,13 +554,7 @@ function buildWchProjectModel(
               ),
             ),
       stopAt:
-        getString(runCommands?.setBreakAt) ??
-        getString(
-          launchAttributes.strings.get(
-            "org.eclipse.cdt.debug.gdbjtag.core.stopAt",
-          ),
-        ) ??
-        "",
+        resolveStopAt(runCommands, launchAttributes),
       firstResetType:
         getString(initCommands?.initResetType) ??
         getString(
@@ -675,12 +584,10 @@ function buildWchProjectModel(
 }
 
 // 提取 .launch 中的键值属性，便于按 key 读取。
-function createLaunchAttributeMaps(data: unknown): {
-  strings: Map<string, string>;
-  ints: Map<string, number>;
-} {
+function createLaunchAttributeMaps(data: unknown): LaunchAttributeMaps {
   const strings = new Map<string, string>();
   const ints = new Map<string, number>();
+  const booleans = new Map<string, boolean>();
   const root = asRecord(data);
   const launchConfiguration = asRecord(root?.launchConfiguration);
 
@@ -704,7 +611,25 @@ function createLaunchAttributeMaps(data: unknown): {
     }
   }
 
-  return { strings, ints };
+  for (const item of asArray(launchConfiguration?.booleanAttribute)) {
+    const attribute = asRecord(item);
+    const key = getString(attribute?.["@_key"]);
+    const value = getBoolean(attribute?.["@_value"]);
+
+    if (key && value !== null) {
+      booleans.set(key, value);
+    }
+  }
+
+  return { strings, ints, booleans };
+}
+
+function resolveStopAt(
+  runCommands: Record<string, unknown> | null,
+  _launchAttributes: LaunchAttributeMaps,
+): string {
+  const runCommandSetBreak = getBoolean(runCommands?.setBreak);
+  return runCommandSetBreak === true ? getString(runCommands?.setBreakAt) ?? "" : "";
 }
 
 // 从 .cproject 中抽取少量 .wvproj 没有或不够直观的构建信息。
@@ -1374,7 +1299,7 @@ function resolveOpenOcdDebugConfig(
   };
 }
 
-function resolveToolchainMetadata(gdbExecutable: string): WchResolvedToolchain {
+function resolveToolchainMetadata(gdbExecutable: string): WchToolchainModel {
   const matchedToolchainName = /\$\{WCH:Toolchain:([^}]+)\}/
     .exec(gdbExecutable)?.[1]
     ?.trim()
@@ -1398,13 +1323,14 @@ function resolveToolchainMetadata(gdbExecutable: string): WchResolvedToolchain {
 function buildResolvedToolchain(
   directoryName: string,
   executablePrefix: string,
-): WchResolvedToolchain {
+): WchToolchainModel {
   return {
     directoryName,
     executablePrefix,
     executables: {
       gcc: executablePrefix ? `${executablePrefix}gcc.exe` : "",
       gpp: executablePrefix ? `${executablePrefix}g++.exe` : "",
+      gdb: executablePrefix ? `${executablePrefix}gdb.exe` : "",
       objcopy: executablePrefix ? `${executablePrefix}objcopy.exe` : "",
       objdump: executablePrefix ? `${executablePrefix}objdump.exe` : "",
       size: executablePrefix ? `${executablePrefix}size.exe` : "",

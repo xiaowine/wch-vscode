@@ -18,6 +18,8 @@ import { resolveProjectFileSystemPath, toLogicalProjectPath } from "../build/bui
 import type { ResolvedBuildProject } from "../build/buildProjectResolver";
 import { buildOpenOcdServerArgs, resolveConfiguredOpenOcdExecutable } from "../debug/debugConfig";
 import { getList, getString, getTuple, parseMiLine } from "../debug/miParser";
+import { buildWchProjectModels } from "../projectModelBuilder";
+import type { ParsedWchProject } from "../projectState";
 suite("wch-vscode Test Suite", () => {
   vscode.window.showInformationMessage("Start wch-vscode tests.");
 
@@ -46,7 +48,7 @@ suite("wch-vscode Test Suite", () => {
     const sourcePath = resolveProjectFileSystemPath(model, "${project}/Core/startup/startup_ch32v00x.S");
     assert.strictEqual(
       sourcePath,
-      path.resolve(model.folderPath, "..\\shared\\Core", "startup", "startup_ch32v00x.S"),
+      path.resolve(model.identity.folderPath, "..\\shared\\Core", "startup", "startup_ch32v00x.S"),
     );
     assert.strictEqual(
       toLogicalProjectPath(model, sourcePath),
@@ -58,6 +60,41 @@ suite("wch-vscode Test Suite", () => {
     const model = createModel();
     model.build.riscvExtensions = ["M", "A", "C", "Zmmul"];
     assert.strictEqual(buildMarch(model), "rv32imac_zmmul");
+  });
+
+  test("wvproj setBreak=false disables debug stopAt", () => {
+    const [model] = buildWchProjectModels(createParsedProject({
+      runCommands: {
+        setBreak: false,
+        setBreakAt: "handle_reset",
+      },
+    }));
+
+    assert.strictEqual(model.debug.stopAt, "");
+  });
+
+  test("wvproj setBreak=true enables configured debug stopAt", () => {
+    const [model] = buildWchProjectModels(createParsedProject({
+      runCommands: {
+        setBreak: true,
+        setBreakAt: "custom_boot_entry",
+      },
+    }));
+
+    assert.strictEqual(model.debug.stopAt, "custom_boot_entry");
+  });
+
+  test("launch setStopAt does not affect debug stopAt", () => {
+    const [model] = buildWchProjectModels(createParsedProject({
+      launchBooleans: {
+        "org.eclipse.cdt.debug.gdbjtag.core.setStopAt": true,
+      },
+      launchStrings: {
+        "org.eclipse.cdt.debug.gdbjtag.core.stopAt": "handle_reset",
+      },
+    }));
+
+    assert.strictEqual(model.debug.stopAt, "");
   });
 
   test("compiler executable follows model build prefix", () => {
@@ -245,6 +282,15 @@ suite("wch-vscode Test Suite", () => {
       assert.strictEqual(getString(frame?.fullname), "C:\\p\\main.c");
     }
 
+    const multiFrameStack = parseMiLine('81^done,stack=[frame={level="0",func="task2_task"},frame={level="1",func="vPortTaskWrapper"}]');
+    assert.strictEqual(multiFrameStack.kind, "result");
+    if (multiFrameStack.kind === "result") {
+      const frames = getList(multiFrameStack.results.stack);
+      assert.strictEqual(frames.length, 2);
+      assert.strictEqual(getString(getTuple(getTuple(frames[0])?.frame)?.func), "task2_task");
+      assert.strictEqual(getString(getTuple(getTuple(frames[1])?.frame)?.func), "vPortTaskWrapper");
+    }
+
     const variables = parseMiLine('9^done,variables=[{name="counter",value="3"},{name="flag",type="int"}]');
     assert.strictEqual(variables.kind, "result");
     if (variables.kind === "result") {
@@ -271,19 +317,19 @@ function createResolvedBuildProject(): ResolvedBuildProject {
   const model = createModel();
   return {
     workspaceFolder: {
-      uri: vscode.Uri.file(model.folderPath),
-      name: model.folderName,
+      uri: vscode.Uri.file(model.identity.folderPath),
+      name: model.identity.folderName,
       index: 0,
     },
     model,
-    outputDirectory: path.join(model.folderPath, model.build.configName),
-    targetBaseName: model.project.name,
-    elfPath: path.join(model.folderPath, model.build.configName, `${model.project.name}.elf`),
-    hexPath: path.join(model.folderPath, model.build.configName, `${model.project.name}.hex`),
-    lstPath: path.join(model.folderPath, model.build.configName, `${model.project.name}.lst`),
-    sizPath: path.join(model.folderPath, model.build.configName, `${model.project.name}.siz`),
-    mapFilePath: path.join(model.folderPath, model.build.configName, `${model.project.name}.map`),
-    linkerScriptPath: path.join(model.folderPath, "Ld", "Link.ld"),
+    outputDirectory: path.join(model.identity.folderPath, model.build.configName),
+    targetBaseName: model.identity.name,
+    elfPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.elf`),
+    hexPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.hex`),
+    lstPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.lst`),
+    sizPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.siz`),
+    mapFilePath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.map`),
+    linkerScriptPath: path.join(model.identity.folderPath, "Ld", "Link.ld"),
     toolchainPaths: {
       rootPath: "F:\\MounRiver\\MounRiver_Studio2",
       make: "F:\\MounRiver\\MounRiver_Studio2\\make.exe",
@@ -300,52 +346,139 @@ function createResolvedBuildProject(): ResolvedBuildProject {
   };
 }
 
-function createModel(): WchProjectModel {
+function createParsedProject(options: {
+  runCommands?: Record<string, unknown>;
+  launchStrings?: Record<string, string>;
+  launchBooleans?: Record<string, boolean>;
+}): ParsedWchProject {
+  const stringAttribute = Object.entries(options.launchStrings ?? {}).map(([key, value]) => ({
+    "@_key": key,
+    "@_value": value,
+  }));
+  const booleanAttribute = Object.entries(options.launchBooleans ?? {}).map(([key, value]) => ({
+    "@_key": key,
+    "@_value": String(value),
+  }));
+
   return {
-    baseName: "DemoProject",
     folderPath: "C:\\workspace\\DemoProject",
     folderName: "DemoProject",
-    linkedFolders: [
+    cprojectFiles: [],
+    projectPairs: [
       {
-        name: "Core",
-        location: "..\\shared\\Core",
+        baseName: "DemoProject",
+        launch: {
+          filePath: "C:\\workspace\\DemoProject\\DemoProject.launch",
+          fileName: "DemoProject.launch",
+          format: "launch-xml",
+          data: {
+            launchConfiguration: {
+              stringAttribute,
+              booleanAttribute,
+            },
+          },
+        },
+        wvproj: {
+          filePath: "C:\\workspace\\DemoProject\\DemoProject.wvproj",
+          fileName: "DemoProject.wvproj",
+          format: "wvproj-json",
+          data: {
+            basic: {
+              projectName: "DemoProject",
+              architecture: "RISC-V",
+              chipInfo: {
+                toolchain: "RISC-V",
+                mcu: "CH32V203",
+              },
+            },
+            buildConfig: {
+              configurations: [
+                {
+                  name: "obj",
+                },
+              ],
+            },
+            debugConfigurations: {
+              startup: {
+                runCommands: options.runCommands ?? {},
+              },
+            },
+          },
+        },
       },
     ],
-    files: {
-      cproject: [],
-      launch: "",
-      wvproj: "",
-    },
-    project: {
+    models: [],
+  };
+}
+
+function createModel(): WchProjectModel {
+  const assembler = {
+    usePreprocessor: true,
+    doNotSearchSystemDirectories: false,
+    preprocessOnly: false,
+    includePaths: [],
+    includeSystemPaths: [],
+    includeFiles: [],
+    definedSymbols: [],
+    undefinedSymbols: [],
+    assemblerFlags: [],
+    generateAssemblerListing: false,
+    saveTemporaryFiles: false,
+    verbose: false,
+    otherAssemblerFlags: [],
+    warningFlags: [],
+    args: ["-march=rv32imac", "-mabi=ilp32", "-x", "assembler-with-cpp"],
+  };
+  const c = {
+    standard: "gnu11",
+    includePaths: [],
+    includeSystemPaths: [],
+    includeFiles: [],
+    definedSymbols: [],
+    undefinedSymbols: [],
+    doNotSearchSystemDirectories: false,
+    doNotSearchSystemCppDirectories: false,
+    preprocessOnly: false,
+    generateAssemblerListing: false,
+    saveTemporaryFiles: false,
+    verbose: false,
+    optimizationFlags: [],
+    warningFlags: [],
+    debuggingFlags: [],
+    otherCompilerFlags: [],
+    args: ["-march=rv32imac", "-mabi=ilp32", "-O0", "-ffunction-sections", "-fdata-sections", "-std=gnu11"],
+  };
+  const cpp = {
+    ...c,
+    standard: "gnu++17",
+    args: ["-march=rv32imac", "-mabi=ilp32", "-O0", "-ffunction-sections", "-fdata-sections", "-std=gnu++17"],
+  };
+
+  return {
+    identity: {
       name: "DemoProject",
-      projectType: "c",
-      architecture: "RISC-V",
-      artifact: {
-        name: "${ProjName}",
-        extension: "elf",
-        outputPrefix: "",
-        outputFile: "",
+      baseName: "DemoProject",
+      folderPath: "C:\\workspace\\DemoProject",
+      folderName: "DemoProject",
+      files: {
+        cproject: [],
+        launch: "",
+        wvproj: "",
       },
     },
-    chip: {
-      vendor: "WCH",
-      series: "CH32V",
+    target: {
+      architecture: "RISC-V",
+      toolchain: "RISC-V",
       mcu: "CH32V203",
       rtos: "NoneOS",
-      toolchain: "RISC-V",
-      debugLink: "WCH-Link",
       svdPath: "",
-    },
-    resolvedToolchain: {
-      directoryName: "RISC-V Embedded GCC12",
-      executablePrefix: "riscv-wch-elf-",
-      executables: {
-        gcc: "riscv-wch-elf-gcc.exe",
-        gpp: "riscv-wch-elf-g++.exe",
-        objcopy: "riscv-wch-elf-objcopy.exe",
-        objdump: "riscv-wch-elf-objdump.exe",
-        size: "riscv-wch-elf-size.exe",
-      },
+      debugLink: "WCH-Link",
+      linkedFolders: [
+        {
+          name: "Core",
+          location: "..\\shared\\Core",
+        },
+      ],
     },
     build: {
       configName: "obj",
@@ -356,16 +489,28 @@ function createModel(): WchProjectModel {
       toolchainName: "RISC-V",
       commandPrefix: "riscv-none-embed-",
       compilerPath: "riscv-none-embed-gcc",
+      toolchain: {
+        directoryName: "RISC-V Embedded GCC12",
+        executablePrefix: "riscv-wch-elf-",
+        executables: {
+          gcc: "riscv-wch-elf-gcc.exe",
+          gpp: "riscv-wch-elf-g++.exe",
+          gdb: "riscv-wch-elf-gdb.exe",
+          objcopy: "riscv-wch-elf-objcopy.exe",
+          objdump: "riscv-wch-elf-objdump.exe",
+          size: "riscv-wch-elf-size.exe",
+        },
+      },
+      artifact: {
+        name: "${ProjName}",
+        extension: "elf",
+        outputPrefix: "",
+        outputFile: "",
+      },
       targetArchitecture: "rv32i",
       targetAbi: "ilp32",
       riscvExtensions: ["M", "A", "C"],
       architectureArgs: ["-march=rv32imac", "-mabi=ilp32"],
-      optimizationLevel: "none",
-      functionSections: true,
-      dataSections: true,
-      commonOptimizationFlags: [],
-      commonWarningFlags: [],
-      commonDebuggingFlags: [],
       cStandard: "gnu11",
       cppStandard: "gnu++17",
       includePaths: [],
@@ -373,123 +518,29 @@ function createModel(): WchProjectModel {
       includeFiles: [],
       definedSymbols: [],
       otherCompilerFlags: [],
-      linkerScript: "${project}/Ld/Link.ld",
-      libraries: [],
-      librarySearchPaths: [],
       sourceExcludes: [],
-    },
-    assembler: {
-      usePreprocessor: true,
-      doNotSearchSystemDirectories: false,
-      preprocessOnly: false,
-      includePaths: [],
-      includeSystemPaths: [],
-      includeFiles: [],
-      definedSymbols: [],
-      undefinedSymbols: [],
-      assemblerFlags: [],
-      generateAssemblerListing: false,
-      saveTemporaryFiles: false,
-      verbose: false,
-      otherAssemblerFlags: [],
-      warningFlags: [],
-      args: ["-march=rv32imac", "-mabi=ilp32", "-x", "assembler-with-cpp"],
-    },
-    c: {
-      standard: "gnu11",
-      includePaths: [],
-      includeSystemPaths: [],
-      includeFiles: [],
-      definedSymbols: [],
-      undefinedSymbols: [],
-      doNotSearchSystemDirectories: false,
-      doNotSearchSystemCppDirectories: false,
-      preprocessOnly: false,
-      generateAssemblerListing: false,
-      saveTemporaryFiles: false,
-      verbose: false,
-      optimizationFlags: [],
-      warningFlags: [],
-      debuggingFlags: [],
-      otherCompilerFlags: [],
-      args: ["-march=rv32imac", "-mabi=ilp32", "-O0", "-ffunction-sections", "-fdata-sections", "-std=gnu11"],
-    },
-    cpp: {
-      standard: "gnu++17",
-      includePaths: [],
-      includeSystemPaths: [],
-      includeFiles: [],
-      definedSymbols: [],
-      undefinedSymbols: [],
-      doNotSearchSystemDirectories: false,
-      doNotSearchSystemCppDirectories: false,
-      preprocessOnly: false,
-      generateAssemblerListing: false,
-      saveTemporaryFiles: false,
-      verbose: false,
-      optimizationFlags: [],
-      warningFlags: [],
-      debuggingFlags: [],
-      otherCompilerFlags: [],
-      args: ["-march=rv32imac", "-mabi=ilp32", "-O0", "-ffunction-sections", "-fdata-sections", "-std=gnu++17"],
-    },
-    linker: {
-      linkerScript: "${project}/Ld/Link.ld",
-      libraries: [],
-      librarySearchPaths: [],
-      linkerFlags: [],
-      otherLinkerFlags: [],
-      otherObjects: [],
-      generateMap: "\"${BuildArtifactFileBaseName}.map\"",
-      doNotUseStandardStartFiles: true,
-      doNotUseDefaultLibraries: false,
-      noStartupOrDefaultLibs: false,
-      removeUnusedSections: true,
-      printRemovedSections: false,
-      omitAllSymbolInformation: false,
-      useNewlibNano: true,
-      useFloatWithNanoPrintf: false,
-      useFloatWithNanoScanf: false,
-      doNotUseSyscalls: true,
-      crossReference: false,
-      printLinkMap: false,
-      verbose: false,
-      picolibc: "",
-      useWchPrintffloat: false,
-      useWchPrintf: false,
-      useIqmath: false,
-      args: ["-march=rv32imac", "-mabi=ilp32", "-nostartfiles", "-Wl,--gc-sections", "--specs=nano.specs", "--specs=nosys.specs"],
-    },
-    postBuild: {
-      createFlash: true,
-      flashOutputFormat: "ihex",
-      copyOnlySectionText: false,
-      copyOnlySectionData: false,
-      copyOnlySections: [],
-      flashFlags: [],
-      flashArgs: ["-O", "ihex"],
-      createList: true,
-      listFlags: [],
-      listArgs: ["-x", "-S", "-C", "-l", "-w"],
-      listOptions: {
-        displaySource: true,
-        displayAllHeaders: true,
-        demangleNames: true,
-        displayDebugInfo: false,
-        disassemble: false,
-        displayFileHeaders: false,
-        displayLineNumbers: true,
-        displayRelocationInfo: false,
-        displaySymbols: false,
-        wideLines: true,
+      compile: {
+        assembler,
+        c,
+        cpp,
       },
-      printSize: true,
-      sizeFormat: "berkeley",
-      sizeFlags: [],
-      sizeArgs: ["--format=berkeley"],
-      sizeOptions: {
-        hex: false,
-        showTotals: false,
+      linker: {
+        script: "${project}/Ld/Link.ld",
+        libraries: [],
+        librarySearchPaths: [],
+        linkerFlags: [],
+        otherLinkerFlags: [],
+        otherObjects: [],
+        mapFile: "\"${BuildArtifactFileBaseName}.map\"",
+        args: ["-march=rv32imac", "-mabi=ilp32", "-nostartfiles", "-Wl,--gc-sections", "--specs=nano.specs", "--specs=nosys.specs"],
+      },
+      postBuild: {
+        createFlash: true,
+        flashArgs: ["-O", "ihex"],
+        createList: true,
+        listArgs: ["-x", "-S", "-C", "-l", "-w"],
+        printSize: true,
+        sizeArgs: ["--format=berkeley"],
       },
     },
     debug: {

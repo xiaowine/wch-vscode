@@ -32,6 +32,7 @@ import {
   DEBUG_PROJECT_COMMAND,
   getCurrentDebugTargetTooltip,
 } from "./debug/debugProjectCommand";
+import { registerWchDebugLogTracker } from "./debug/debugLog";
 import { getWchProjectState } from "./projectState";
 import { resolveCurrentBuildTarget } from "./build/buildProjectResolver";
 import {
@@ -47,6 +48,7 @@ import type { WchProjectModel } from "./models/WchProjectModel";
 
 export function activate(context: vscode.ExtensionContext) {
   // 扩展入口只负责组装侧栏和项目检测服务。
+  registerWchDebugLogTracker(context);
   const sidebarProvider = new WchVscodeSidebarProvider();
   const projectFilesProvider = new WchProjectFilesProvider();
   const providers = [sidebarProvider, projectFilesProvider];
@@ -381,9 +383,8 @@ function updateTargetInfoStatusBarItem(
   }
 
   const { model } = resolution.target;
-  const projectName = model.project.name || model.baseName;
-  const mcuName =
-    model.chip.mcu || model.chip.series || model.project.architecture;
+  const projectName = model.identity.name || model.identity.baseName;
+  const mcuName = model.target.mcu || model.target.architecture;
   targetInfoStatusBarItem.text = `${projectName} · ${mcuName}`;
   targetInfoStatusBarItem.tooltip = `${projectName}\nMCU: ${mcuName}`;
   targetInfoStatusBarItem.show();

@@ -88,7 +88,7 @@ export function resolveToolchainPaths(
 		return undefined;
 	}
 
-	const { resolvedToolchain } = model;
+	const resolvedToolchain = model.build.toolchain;
 	if (!resolvedToolchain.directoryName) {
 		return undefined;
 	}

@@ -19,6 +19,8 @@ type LaunchArgs = {
   host: string;
   gdbPort: number;
   startupCommands?: string[];
+  stopAt?: string;
+  wvprojPath?: string;
 };
 
 type SourceBreakpoint = { line: number; column?: number };
@@ -27,6 +29,9 @@ type SourceBreakpointState = {
   requested: SourceBreakpoint[];
   gdbNumbersByLine: Map<number, string>;
 };
+type VariableReference =
+  | { kind: "locals"; frameId: number }
+  | { kind: "expression"; frameId?: number; expression: string };
 
 class WchRiscvDebugSession {
   private seq = 1;
@@ -46,12 +51,14 @@ class WchRiscvDebugSession {
   private readonly miRecordWaiters = new Set<(record: MiRecord) => void>();
   private readonly breakpoints = new Map<string, SourceBreakpointState>();
   private readonly stackFrames = new Map<number, MiTuple>();
-  private readonly variableReferences = new Map<number, { frameId?: number; expression?: string; locals?: boolean }>();
+  private readonly variableReferences = new Map<number, VariableReference>();
+  private stopAtBreakpointNumber: string | undefined;
   private configurationDone = false;
   private gdbReady = false;
   private targetRunning = false;
   private suppressNextStoppedEvent = false;
   private suppressedStoppedResults: MiTuple | undefined;
+  private terminated = false;
   // 某些旧版 GDB 的 MI 栈帧可能缺少 file/fullname，需要从 stopped 事件或 console 输出中补位置。
   private lastStoppedLocation: { file: string; line: number } | undefined;
   private lastStoppedBreakpointNumber: string | undefined;
@@ -95,6 +102,7 @@ class WchRiscvDebugSession {
         case "initialize":
           this.sendResponse(request, {
             supportsConfigurationDoneRequest: true,
+            supportsEvaluateForHovers: true,
             supportsSetVariable: false,
             supportsStepBack: false,
           });
@@ -105,8 +113,11 @@ class WchRiscvDebugSession {
         case "configurationDone":
           this.configurationDone = true;
           await this.applyAllBreakpoints();
-          await this.continueExecution();
+          await this.applyStopAtBreakpoint();
           this.sendResponse(request);
+          if (!(await this.stopIfCurrentLocationHasBreakpoint())) {
+            await this.continueExecution();
+          }
           break;
         case "setBreakpoints":
           await this.handleSetBreakpoints(request);
@@ -123,15 +134,18 @@ class WchRiscvDebugSession {
         case "variables":
           await this.handleVariables(request);
           break;
+        case "evaluate":
+          await this.handleEvaluate(request);
+          break;
         case "continue":
           await this.continueExecution();
           this.sendResponse(request, { allThreadsContinued: true });
           break;
         case "next":
-          await this.handleStepRequest(request, "-exec-next");
+          await this.handleStepRequest(request, "next");
           break;
         case "stepIn":
-          await this.handleStepRequest(request, "-exec-step");
+          await this.handleStepRequest(request, "stepIn");
           break;
         case "stepOut":
           await this.handleStepOutRequest(request);
@@ -151,24 +165,60 @@ class WchRiscvDebugSession {
       }
     } catch (error) {
       this.sendResponse(request, undefined, false, asErrorMessage(error));
-      this.sendOutput(asErrorMessage(error));
+      this.sendOutput(`${asErrorMessage(error)}\n`);
     }
   }
 
   private async handleLaunch(request: DapMessage): Promise<void> {
     this.launchArgs = request.arguments as LaunchArgs;
     this.validateLaunchArgs(this.launchArgs);
-    this.sendResponse(request);
+    this.launchArgs.stopAt = this.resolveCurrentStopAt(this.launchArgs);
+    this.sendOutput(`启动调试会话：${this.launchArgs.projectName}\n`);
+    this.sendOutput(`工作目录：${this.launchArgs.cwd}\n`);
+    this.sendOutput(`ELF：${this.launchArgs.elfPath}\n`);
+    this.sendOutput(`StopAt：${this.launchArgs.stopAt?.trim() || "<disabled>"}\n`);
 
-    await this.startOpenOcd(this.launchArgs);
-    await this.startGdb(this.launchArgs);
-    await this.initializeGdb(this.launchArgs);
-    this.gdbReady = true;
-    this.sendEvent("initialized");
+    try {
+      await this.startOpenOcd(this.launchArgs);
+      await this.startGdb(this.launchArgs);
+      await this.initializeGdb(this.launchArgs);
+      this.gdbReady = true;
+      this.sendResponse(request);
+      this.sendEvent("initialized");
+    } catch (error) {
+      this.sendResponse(request, undefined, false, asErrorMessage(error));
+      await this.terminateDebugSession(formatOperationFailureMessage("调试失败", asErrorMessage(error)));
+      return;
+    }
 
     if (this.configurationDone) {
       await this.applyAllBreakpoints();
-      await this.continueExecution();
+      await this.applyStopAtBreakpoint();
+      if (!(await this.stopIfCurrentLocationHasBreakpoint())) {
+        await this.continueExecution();
+      }
+    }
+  }
+
+  private resolveCurrentStopAt(args: LaunchArgs): string {
+    const wvprojPath = args.wvprojPath?.trim();
+    if (!wvprojPath) {
+      return args.stopAt?.trim() ?? "";
+    }
+
+    try {
+      const data = JSON.parse(fs.readFileSync(wvprojPath, "utf8")) as unknown;
+      const root = asRecord(data);
+      const debugConfigurations = asRecord(root?.debugConfigurations);
+      const startup = asRecord(debugConfigurations?.startup);
+      const runCommands = asRecord(startup?.runCommands);
+      const setBreak = getBoolean(runCommands?.setBreak);
+      const stopAt = setBreak === true ? getPlainString(runCommands?.setBreakAt).trim() : "";
+      this.sendOutput(`刷新 .wvproj StopAt：${stopAt || "<disabled>"} (${wvprojPath})\n`);
+      return stopAt;
+    } catch (error) {
+      this.sendOutput(`刷新 .wvproj StopAt 失败，使用 launch 配置：${asErrorMessage(error)}\n`);
+      return args.stopAt?.trim() ?? "";
     }
   }
 
@@ -230,9 +280,10 @@ class WchRiscvDebugSession {
     frame: MiTuple,
     sourcePath: string,
   ): DebugProtocol.StackFrame {
+    const line = this.getDisplayLine(frame, sourcePath);
     return {
       id,
-      name: getString(frame.func) || "<unknown>",
+      name: this.formatFrameName(frame, sourcePath, line),
       source: sourcePath
         ? {
             name: path.basename(sourcePath),
@@ -240,9 +291,32 @@ class WchRiscvDebugSession {
             sourceReference: 0,
           }
         : undefined,
-      line: Number.parseInt(getString(frame.line), 10) || this.lastStoppedLocation?.line || 1,
+      line,
       column: 1,
     };
+  }
+
+  private getDisplayLine(frame: MiTuple, sourcePath: string): number {
+    const rawLine = Number.parseInt(getString(frame.line), 10) || this.lastStoppedLocation?.line || 1;
+    if (!this.shouldDisplayStopAtLabelLine() || !sourcePath) {
+      return rawLine;
+    }
+
+    return this.findSymbolLabelLine(sourcePath, this.launchArgs?.stopAt?.trim() ?? "") ?? rawLine;
+  }
+
+  private formatFrameName(frame: MiTuple, sourcePath: string, line: number): string {
+    const func = getString(frame.func);
+    if (func && func !== "??") {
+      return func;
+    }
+
+    if (sourcePath) {
+      return `${path.basename(sourcePath)}:${line}`;
+    }
+
+    const address = getString(frame.addr);
+    return address ? `<unknown> ${address}` : "<unknown>";
   }
 
   private resolveFrameSourcePath(frame: MiTuple): string {
@@ -273,8 +347,13 @@ class WchRiscvDebugSession {
 
   private handleScopes(request: DapMessage): void {
     const frameId = Number((request.arguments ?? {}).frameId);
+    if (!this.stackFrames.has(frameId)) {
+      this.sendResponse(request, { scopes: [] });
+      return;
+    }
+
     const variablesReference = this.nextVariableReference++;
-    this.variableReferences.set(variablesReference, { frameId, locals: true });
+    this.variableReferences.set(variablesReference, { kind: "locals", frameId });
     this.sendResponse(request, {
       scopes: [new Scope("Locals", variablesReference, false)],
     });
@@ -288,14 +367,16 @@ class WchRiscvDebugSession {
       return;
     }
 
-    if (reference.locals) {
-      const record = await this.gdbCommand("-stack-list-variables --simple-values");
+    if (reference.kind === "locals") {
+      const record = await this.stackListVariables(reference.frameId);
       this.sendResponse(request, { variables: this.parseVariables(getList(record.results.variables)) });
       return;
     }
 
-    if (reference.expression) {
-      const record = await this.gdbCommand(`-data-evaluate-expression ${quoteMiArgument(reference.expression)}`);
+    if (reference.kind === "expression") {
+      const record = await this.withSelectedFrame(reference.frameId, () =>
+        this.gdbCommand(`-data-evaluate-expression ${quoteMiArgument(reference.expression)}`),
+      );
       this.sendResponse(request, {
         variables: [new Variable(reference.expression, getString(record.results.value), 0)],
       });
@@ -305,18 +386,77 @@ class WchRiscvDebugSession {
     this.sendResponse(request, { variables: [] });
   }
 
+  private async handleEvaluate(request: DapMessage): Promise<void> {
+    const args = request.arguments as DebugProtocol.EvaluateArguments | undefined;
+    const expression = args?.expression?.trim() ?? "";
+    if (!expression) {
+      this.sendResponse(request, { result: "", variablesReference: 0 });
+      return;
+    }
+
+    try {
+      const record = await this.withSelectedFrame(args?.frameId, () =>
+        this.gdbCommand(`-data-evaluate-expression ${quoteMiArgument(expression)}`),
+      );
+      const result = getString(record.results.value);
+      this.sendResponse(request, {
+        result,
+        variablesReference: 0,
+      });
+    } catch (error) {
+      this.sendResponse(request, {
+        result: `<${asErrorMessage(error)}>`,
+        variablesReference: 0,
+      });
+    }
+  }
+
   private parseVariables(values: MiValue[]): DebugProtocol.Variable[] {
     return values.flatMap((value) => {
       const tuple = getTuple(value);
       if (!tuple) {
         return [];
       }
-      return [new Variable(
-        getString(tuple.name),
-        getString(tuple.value) || getString(tuple.type),
+      const name = getString(tuple.name);
+      const type = getString(tuple.type);
+      const variable = new Variable(
+        name,
+        getString(tuple.value) || type || "<unavailable>",
         0,
-      )];
+      ) as DebugProtocol.Variable;
+      variable.type = type || undefined;
+      variable.evaluateName = name || undefined;
+      return [variable];
     });
+  }
+
+  private async withSelectedFrame<T>(frameId: number | undefined, action: () => Promise<T>): Promise<T> {
+    if (frameId === undefined || !Number.isFinite(frameId)) {
+      return action();
+    }
+
+    const frame = this.stackFrames.get(frameId);
+    const level = getString(frame?.level);
+    if (!level) {
+      return action();
+    }
+
+    await this.gdbCommand(`-stack-select-frame ${level}`);
+    return action();
+  }
+
+  private async stackListVariables(frameId: number): Promise<Extract<MiRecord, { kind: "result" }>> {
+    const frame = this.stackFrames.get(frameId);
+    const level = getString(frame?.level);
+    if (!level) {
+      return this.gdbCommand("-stack-list-variables --all-values");
+    }
+
+    try {
+      return await this.gdbCommand(`-stack-list-variables --thread 1 --frame ${level} --all-values`);
+    } catch {
+      return this.withSelectedFrame(frameId, () => this.gdbCommand("-stack-list-variables --all-values"));
+    }
   }
 
   private async applyAllBreakpoints(): Promise<void> {
@@ -324,6 +464,81 @@ class WchRiscvDebugSession {
       if (state.sourcePath) {
         await this.setGdbBreakpoints(state.sourcePath, state.requested);
       }
+    }
+  }
+
+  private async applyStopAtBreakpoint(): Promise<void> {
+    const stopAt = this.launchArgs?.stopAt?.trim();
+    if (!stopAt || this.stopAtBreakpointNumber) {
+      return;
+    }
+
+    this.sendOutput(`设置启动断点：${stopAt}\n`);
+    const record = await this.gdbCommand(`-break-insert -h ${quoteMiArgument(stopAt)}`);
+    this.stopAtBreakpointNumber = getString(getTuple(record.results.bkpt)?.number);
+    this.sendOutput(`启动断点编号：${this.stopAtBreakpointNumber || "<unknown>"}\n`);
+  }
+
+  private async stopIfCurrentLocationHasBreakpoint(): Promise<boolean> {
+    const record = await this.tryGdbCommandWithRecord("-stack-info-frame");
+    const frame = getTuple(record?.results.frame);
+    if (!frame) {
+      return false;
+    }
+
+    const line = Number.parseInt(getString(frame.line), 10);
+    if (!Number.isFinite(line)) {
+      return false;
+    }
+
+    const sourcePath = this.resolveFrameSourcePath(frame);
+    const breakpointNumber = this.breakpoints.get(this.toBreakpointKey(sourcePath))?.gdbNumbersByLine.get(line);
+    if (!breakpointNumber && !this.isCurrentStopAtFrame(frame)) {
+      return false;
+    }
+
+    this.lastStoppedBreakpointNumber = breakpointNumber || this.stopAtBreakpointNumber;
+    this.captureStoppedFrame(frame);
+    const displayLine = this.getDisplayLine(frame, sourcePath);
+    this.targetRunning = false;
+    this.sendEvent("stopped", {
+      reason: "breakpoint",
+      threadId: 1,
+      allThreadsStopped: true,
+      line: displayLine,
+    });
+    return true;
+  }
+
+  private isCurrentStopAtFrame(frame: MiTuple): boolean {
+    const stopAt = this.launchArgs?.stopAt?.trim();
+    if (!stopAt) {
+      return false;
+    }
+
+    return getString(frame.func) === stopAt;
+  }
+
+  private shouldDisplayStopAtLabelLine(): boolean {
+    return Boolean(
+      this.stopAtBreakpointNumber
+      && this.lastStoppedBreakpointNumber
+      && this.lastStoppedBreakpointNumber === this.stopAtBreakpointNumber,
+    );
+  }
+
+  private findSymbolLabelLine(sourcePath: string, symbol: string): number | undefined {
+    if (!symbol) {
+      return undefined;
+    }
+
+    try {
+      const lines = fs.readFileSync(sourcePath, "utf8").split(/\r?\n/);
+      const labelPattern = new RegExp(`^\\s*${escapeRegExp(symbol)}\\s*:`);
+      const index = lines.findIndex((line) => labelPattern.test(line));
+      return index >= 0 ? index + 1 : undefined;
+    } catch {
+      return undefined;
     }
   }
 
@@ -374,7 +589,7 @@ class WchRiscvDebugSession {
     }
   }
 
-  private async stepExecution(command: string): Promise<void> {
+  private async stepExecution(command: string): Promise<MiTuple | undefined> {
     // WCH/OpenOCD 硬件断点在单步时可能继续命中当前地址；删除比禁用更稳定。
     const deletedBreakpointNumbers = await this.deleteBreakpointsAtLastStoppedLocation();
     this.suppressNextStoppedEvent = true;
@@ -388,6 +603,9 @@ class WchRiscvDebugSession {
       this.markTargetRunning();
       this.sendEvent("continued", { threadId: 1, allThreadsContinued: true });
       await stopped.promise;
+      const stoppedResults = this.suppressedStoppedResults;
+      this.suppressedStoppedResults = undefined;
+      return stoppedResults;
     } catch (error) {
       stopped.cancel();
       throw error;
@@ -398,12 +616,10 @@ class WchRiscvDebugSession {
     }
   }
 
-  private async handleStepRequest(request: DapMessage, command: string): Promise<void> {
+  private async handleStepRequest(request: DapMessage, kind: "next" | "stepIn"): Promise<void> {
     // VS Code 期望先收到单步请求响应，再收到 stopped 事件，否则可能提前拉取旧栈帧。
-    await this.stepExecution(command);
+    const stoppedResults = await this.runStep(kind);
     this.sendResponse(request);
-    const stoppedResults = this.suppressedStoppedResults;
-    this.suppressedStoppedResults = undefined;
     if (stoppedResults) {
       this.sendStoppedEvent(stoppedResults);
     }
@@ -415,7 +631,31 @@ class WchRiscvDebugSession {
       throw new Error("当前已经在最外层栈帧，无法单步跳出");
     }
 
-    await this.handleStepRequest(request, "-exec-finish");
+    const stoppedResults = await this.stepExecution("-exec-finish");
+    this.sendResponse(request);
+    if (stoppedResults) {
+      this.sendStoppedEvent(stoppedResults);
+    }
+  }
+
+  private async runStep(kind: "next" | "stepIn"): Promise<MiTuple | undefined> {
+    const sourcePath = await this.resolveCurrentStoppedSourcePath();
+    const useInstructionStep = sourcePath ? isAssemblySourcePath(sourcePath) : false;
+    const command = useInstructionStep
+      ? kind === "next" ? "-exec-next-instruction" : "-exec-step-instruction"
+      : kind === "next" ? "-exec-next" : "-exec-step";
+    this.sendOutput(`单步命令：${command}${sourcePath ? ` (${sourcePath})` : ""}\n`);
+    return this.stepExecution(command);
+  }
+
+  private async resolveCurrentStoppedSourcePath(): Promise<string> {
+    if (this.lastStoppedLocation?.file) {
+      return this.resolveSourcePath(this.lastStoppedLocation.file);
+    }
+
+    const record = await this.tryGdbCommandWithRecord("-stack-info-frame");
+    const frame = getTuple(record?.results.frame);
+    return frame ? this.resolveFrameSourcePath(frame) : "";
   }
 
   private async pauseExecution(suppressStoppedEvent = false): Promise<void> {
@@ -439,43 +679,70 @@ class WchRiscvDebugSession {
   }
 
   private async startOpenOcd(args: LaunchArgs): Promise<void> {
-    this.sendOutput(`OpenOCD: ${args.openOcdPath} ${args.openOcdArgs.join(" ")}`);
+    this.sendOutput(`OpenOCD: ${args.openOcdPath} ${args.openOcdArgs.join(" ")}\n`);
     this.openOcd = spawn(args.openOcdPath, args.openOcdArgs, { cwd: args.openOcdCwd });
+    this.sendOutput(`OpenOCD PID：${this.openOcd.pid ?? "<unknown>"}\n`);
     this.openOcd.stdout.on("data", (chunk: Buffer) => this.sendOutput(chunk.toString("utf8")));
     this.openOcd.stderr.on("data", (chunk: Buffer) => this.sendOutput(chunk.toString("utf8")));
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, 1200);
+      let startupSettled = false;
+      const timer = setTimeout(() => {
+        startupSettled = true;
+        resolve();
+      }, 1200);
       this.openOcd?.once("exit", (code) => {
         clearTimeout(timer);
-        reject(new Error(`OpenOCD 启动失败，退出码：${code ?? "未知"}`));
+        if (!startupSettled) {
+          startupSettled = true;
+          reject(new Error(`OpenOCD 启动失败，退出码：${code ?? "未知"}`));
+          return;
+        }
+
+        void this.terminateDebugSession(formatOperationFailureMessage("调试失败", `OpenOCD 已退出，退出码：${code ?? "未知"}`));
       });
       this.openOcd?.once("error", (error) => {
         clearTimeout(timer);
-        reject(error);
+        if (!startupSettled) {
+          startupSettled = true;
+          reject(error);
+          return;
+        }
+
+        void this.terminateDebugSession(formatOperationFailureMessage("调试失败", `OpenOCD 错误：${error.message}`));
       });
     });
   }
 
   private async startGdb(args: LaunchArgs): Promise<void> {
-    this.sendOutput(`GDB: ${args.gdbPath} --interpreter=mi2`);
+    this.sendOutput(`GDB: ${args.gdbPath} --interpreter=mi2\n`);
     this.gdb = spawn(args.gdbPath, ["--interpreter=mi2"], { cwd: args.cwd });
+    this.sendOutput(`GDB PID：${this.gdb.pid ?? "<unknown>"}\n`);
     this.gdb.stdout.on("data", (chunk: Buffer) => this.onGdbData(chunk));
     this.gdb.stderr.on("data", (chunk: Buffer) => this.sendOutput(chunk.toString("utf8")));
     this.gdb.once("exit", (code) => {
-      this.sendOutput(`GDB 已退出：${code ?? "未知"}`);
-      this.sendEvent("terminated");
+      this.sendOutput(`GDB 已退出：${code ?? "未知"}\n`);
+      if (!this.terminated) {
+        this.sendEvent("terminated");
+        this.terminated = true;
+      }
     });
     await this.waitForMiRecord((record) => record.kind === "prompt", 15000, "GDB 启动超时");
   }
 
   private async initializeGdb(args: LaunchArgs): Promise<void> {
+    this.sendOutput("初始化 GDB：启用 target-async\n");
     await this.gdbCommand("-gdb-set target-async on");
+    this.sendOutput("初始化 GDB：加载 ELF 符号\n");
     await this.gdbCommand(`-file-exec-and-symbols ${quoteMiArgument(args.elfPath)}`);
+    this.sendOutput(`初始化 GDB：连接 ${args.host}:${args.gdbPort}\n`);
     await this.gdbCommand(`-target-select extended-remote ${args.host}:${args.gdbPort}`);
+    this.sendOutput("初始化 GDB：reset halt\n");
     await this.gdbCommand(`-interpreter-exec console ${quoteMiArgument("monitor reset halt")}`);
+    this.sendOutput("初始化 GDB：下载程序到目标板\n");
     await this.gdbCommand("-target-download");
     for (const command of args.startupCommands ?? []) {
       if (command.trim()) {
+        this.sendOutput(`执行启动命令：${command}\n`);
         await this.gdbCommand(`-interpreter-exec console ${quoteMiArgument(command)}`);
       }
     }
@@ -622,8 +889,11 @@ class WchRiscvDebugSession {
 
   private async deleteBreakpointsAtLastStoppedLocation(): Promise<string[]> {
     if (this.lastStoppedBreakpointNumber) {
-      this.sendOutput(`单步前删除当前断点：${this.lastStoppedBreakpointNumber}`);
+      this.sendOutput(`单步前删除当前断点：${this.lastStoppedBreakpointNumber}\n`);
       await this.gdbCommand(`-break-delete ${this.lastStoppedBreakpointNumber}`);
+      if (this.lastStoppedBreakpointNumber === this.stopAtBreakpointNumber) {
+        this.stopAtBreakpointNumber = undefined;
+      }
       this.removeBreakpointNumberFromState(this.lastStoppedBreakpointNumber);
       return [this.lastStoppedBreakpointNumber];
     }
@@ -635,11 +905,10 @@ class WchRiscvDebugSession {
     const sourcePath = this.resolveSourcePath(this.lastStoppedLocation.file);
     const breakpointNumber = this.breakpoints.get(this.toBreakpointKey(sourcePath))?.gdbNumbersByLine.get(this.lastStoppedLocation.line);
     if (!breakpointNumber) {
-      this.sendOutput(`单步前未找到当前断点：${sourcePath}:${this.lastStoppedLocation.line}`);
       return [];
     }
 
-    this.sendOutput(`单步前删除当前断点：${breakpointNumber} ${sourcePath}:${this.lastStoppedLocation.line}`);
+    this.sendOutput(`单步前删除当前断点：${breakpointNumber} ${sourcePath}:${this.lastStoppedLocation.line}\n`);
     await this.gdbCommand(`-break-delete ${breakpointNumber}`);
     this.removeBreakpointNumberFromState(breakpointNumber);
     return [breakpointNumber];
@@ -708,6 +977,7 @@ class WchRiscvDebugSession {
   }
 
   private async disconnect(): Promise<void> {
+    this.terminated = true;
     try {
       if (this.gdb && !this.gdb.killed) {
         // VS Code 停止调试时，先把 MCU 从调试态恢复到上电运行态，再退出 GDB。
@@ -720,6 +990,22 @@ class WchRiscvDebugSession {
     if (this.openOcd && !this.openOcd.killed) {
       this.openOcd.kill();
     }
+  }
+
+  private async terminateDebugSession(message: string): Promise<void> {
+    if (this.terminated) {
+      return;
+    }
+
+    this.terminated = true;
+    this.sendOutput(`${message}\n`);
+    if (this.gdb && !this.gdb.killed) {
+      this.gdb.kill();
+    }
+    if (this.openOcd && !this.openOcd.killed) {
+      this.openOcd.kill();
+    }
+    this.sendEvent("terminated");
   }
 
   private async resetTargetBeforeDisconnect(): Promise<void> {
@@ -750,6 +1036,14 @@ class WchRiscvDebugSession {
         return true;
       }
       return false;
+    }
+  }
+
+  private async tryGdbCommandWithRecord(command: string): Promise<Extract<MiRecord, { kind: "result" }> | undefined> {
+    try {
+      return await this.gdbCommand(command);
+    } catch {
+      return undefined;
     }
   }
 
@@ -785,7 +1079,10 @@ class WchRiscvDebugSession {
     if (!output) {
       return;
     }
-    this.sendEvent("output", { category: "console", output });
+    const normalizedOutput = output.endsWith("\n") || output.endsWith("\r")
+      ? output
+      : `${output}\n`;
+    this.sendEvent("output", { category: "console", output: normalizedOutput });
   }
 
   private send(message: unknown): void {
@@ -798,8 +1095,53 @@ function quoteMiArgument(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isAssemblySourcePath(sourcePath: string): boolean {
+  const extension = path.extname(sourcePath).toLowerCase();
+  return extension === ".s" || extension === ".asm";
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function getBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  return null;
+}
+
+function getPlainString(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
 function asErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function formatOperationFailureMessage(operation: string, detail: string): string {
+  const hint = /OpenOCD/i.test(detail)
+    ? "。请检查调试器是否被占用，并确认 WCH-Link 和目标板连接正常。"
+    : "";
+  return `${operation}：${detail}${hint}`;
 }
 
 function toDapStoppedReason(gdbReason: string): string {

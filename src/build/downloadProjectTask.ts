@@ -20,7 +20,7 @@ export function getCurrentDownloadTargetTooltip(
   }
 
   const { model } = resolution.target;
-  return `Download ${model.project.name || model.baseName}`;
+  return `Download ${model.identity.name || model.identity.baseName}`;
 }
 
 export async function downloadCurrentProject(
@@ -68,9 +68,9 @@ export async function downloadCurrentProject(
       return true;
     }
 
-    void vscode.window.showErrorMessage(`下载失败，OpenOCD 退出码：${exitCode ?? "未知"}`);
+    void vscode.window.showErrorMessage(formatOpenOcdFailureMessage("下载失败", `OpenOCD 退出码：${exitCode ?? "未知"}`));
   } catch (error) {
-    void vscode.window.showErrorMessage(`下载失败：${asErrorMessage(error)}`);
+    void vscode.window.showErrorMessage(formatOpenOcdFailureMessage("下载失败", asErrorMessage(error)));
   }
   return false;
 }
@@ -96,10 +96,10 @@ function createDownloadTask(
     {
       type: "wchDownload",
       workspaceFolder: project.workspaceFolder.name,
-      projectName: project.model.project.name || project.model.baseName,
+      projectName: project.model.identity.name || project.model.identity.baseName,
     },
     project.workspaceFolder,
-    `Download ${project.model.project.name || project.model.baseName}`,
+    `Download ${project.model.identity.name || project.model.identity.baseName}`,
     "wch-vscode",
     execution,
     [],
@@ -146,4 +146,8 @@ async function fileExists(filePath: string): Promise<boolean> {
 
 function asErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function formatOpenOcdFailureMessage(operation: string, detail: string): string {
+  return `${operation}：${detail}。请检查调试器是否被占用，并确认 WCH-Link 和目标板连接正常。`;
 }

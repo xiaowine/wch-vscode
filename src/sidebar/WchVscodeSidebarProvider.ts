@@ -135,182 +135,47 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
   // 将精简后的项目模型转换成侧栏树节点。
   private buildProjectModelItems(model: WchProjectModel): SidebarItem[] {
     const root = new SidebarItem(
-      model.project.name || model.baseName,
+      model.identity.name || model.identity.baseName,
       vscode.TreeItemCollapsibleState.Expanded,
     );
-    root.description = model.chip.mcu || model.project.architecture;
+    root.description = model.target.mcu || model.target.architecture;
     root.iconPath = new vscode.ThemeIcon("project");
     root.children = [
       this.createSection("Project", [
-        this.createLeaf("Type", model.project.projectType),
-        this.createLeaf("Architecture", model.project.architecture),
+        this.createLeaf("Name", model.identity.name),
+        this.createLeaf("Architecture", model.target.architecture),
         this.createLeaf(
           "Artifact",
-          model.project.artifact.outputFile || this.buildArtifactName(model),
+          model.build.artifact.outputFile || this.buildArtifactName(model),
         ),
         this.createListSection(
           "Linked Folders",
-          model.linkedFolders.map(
+          model.target.linkedFolders.map(
             (item) => `${item.name} -> ${item.location}`,
           ),
         ),
       ]),
-      this.createSection("Chip", [
-        this.createLeaf("Vendor", model.chip.vendor),
-        this.createLeaf("Series", model.chip.series),
-        this.createLeaf("MCU", model.chip.mcu),
-        this.createLeaf("RTOS", model.chip.rtos),
-        this.createLeaf("Toolchain", model.chip.toolchain),
-        this.createLeaf("Link", model.chip.debugLink),
-        this.createLeaf("SVD", model.chip.svdPath),
+      this.createSection("Target", [
+        this.createLeaf("MCU", model.target.mcu),
+        this.createLeaf("RTOS", model.target.rtos),
+        this.createLeaf("Toolchain", model.target.toolchain),
+        this.createLeaf("SVD", model.target.svdPath),
       ]),
       this.createSection("Build", [
         this.createLeaf("Config", model.build.configName),
-        this.createLeaf("Parallel Jobs", model.build.parallelizationNumber),
-        this.createLeaf("Stop On First Error", String(model.build.stopOnFirstBuildError)),
-        this.createLeaf("Pre Script", model.build.preScript),
-        this.createLeaf("Post Script", model.build.postScript),
         this.createLeaf("Toolchain", model.build.toolchainName),
-        this.createLeaf("Prefix", model.build.commandPrefix),
         this.createLeaf(
           "Target",
           `${model.build.targetArchitecture} / ${model.build.targetAbi}`,
         ),
-        this.createLeaf("Extensions", model.build.riscvExtensions.join(", ")),
-        this.createListSection("Architecture Args", model.build.architectureArgs),
-        this.createLeaf("Optimize", model.build.optimizationLevel),
-        this.createListSection("Common Optimization Flags", model.build.commonOptimizationFlags),
-        this.createListSection("Common Warning Flags", model.build.commonWarningFlags),
-        this.createListSection("Common Debugging Flags", model.build.commonDebuggingFlags),
-        this.createLeaf("Linker Script", model.build.linkerScript),
-        this.createListSection("Include Paths", model.build.includePaths),
-        this.createListSection("System Include Paths", model.build.includeSystemPaths),
-        this.createListSection("Include Files", model.build.includeFiles),
-        this.createListSection("Defined Symbols", model.build.definedSymbols),
-        this.createListSection("Other Compiler Flags", model.build.otherCompilerFlags),
-        this.createListSection("Libraries", model.build.libraries),
-        this.createListSection("Library Paths", model.build.librarySearchPaths),
-        this.createListSection("Source Excludes", model.build.sourceExcludes),
+        this.createLeaf("Output", model.build.configName),
+        this.createLeaf("Linker Script", model.build.linker.script),
       ]),
-      this.createSection("Resolved Toolchain", [
-        this.createLeaf("Directory", model.resolvedToolchain.directoryName),
-        this.createLeaf("Executable Prefix", model.resolvedToolchain.executablePrefix),
-        this.createLeaf("gcc", model.resolvedToolchain.executables.gcc),
-        this.createLeaf("g++", model.resolvedToolchain.executables.gpp),
-        this.createLeaf("objcopy", model.resolvedToolchain.executables.objcopy),
-        this.createLeaf("objdump", model.resolvedToolchain.executables.objdump),
-        this.createLeaf("size", model.resolvedToolchain.executables.size),
-      ]),
-      this.createSection("Assembler", [
-        this.createLeaf("Use Preprocessor", String(model.assembler.usePreprocessor)),
-        this.createLeaf(
-          "No System Includes",
-          String(model.assembler.doNotSearchSystemDirectories),
-        ),
-        this.createLeaf("Preprocess Only", String(model.assembler.preprocessOnly)),
-        this.createListSection("Include Paths", model.assembler.includePaths),
-        this.createListSection("System Include Paths", model.assembler.includeSystemPaths),
-        this.createListSection("Include Files", model.assembler.includeFiles),
-        this.createListSection("Defined Symbols", model.assembler.definedSymbols),
-        this.createListSection("Undefined Symbols", model.assembler.undefinedSymbols),
-        this.createListSection("Assembler Flags", model.assembler.assemblerFlags),
-        this.createLeaf(
-          "Misc",
-          `listing:${model.assembler.generateAssemblerListing} temps:${model.assembler.saveTemporaryFiles} verbose:${model.assembler.verbose}`,
-        ),
-        this.createListSection("Warning Flags", model.assembler.warningFlags),
-        this.createListSection("Other Flags", model.assembler.otherAssemblerFlags),
-        this.createListSection("Args", model.assembler.args),
-      ]),
-      this.createSection("C", [
-        this.createLeaf("Standard", model.c.standard),
-        this.createLeaf(
-          "Preprocessor",
-          `nostdinc:${model.c.doNotSearchSystemDirectories} preprocessOnly:${model.c.preprocessOnly}`,
-        ),
-        this.createListSection("Include Paths", model.c.includePaths),
-        this.createListSection("System Include Paths", model.c.includeSystemPaths),
-        this.createListSection("Include Files", model.c.includeFiles),
-        this.createListSection("Defined Symbols", model.c.definedSymbols),
-        this.createListSection("Undefined Symbols", model.c.undefinedSymbols),
-        this.createListSection("Optimization Flags", model.c.optimizationFlags),
-        this.createListSection("Warning Flags", model.c.warningFlags),
-        this.createListSection("Debugging Flags", model.c.debuggingFlags),
-        this.createLeaf(
-          "Misc",
-          `listing:${model.c.generateAssemblerListing} temps:${model.c.saveTemporaryFiles} verbose:${model.c.verbose}`,
-        ),
-        this.createListSection("Other Flags", model.c.otherCompilerFlags),
-        this.createListSection("Args", model.c.args),
-      ]),
-      this.createSection("C++", [
-        this.createLeaf("Standard", model.cpp.standard),
-        this.createLeaf(
-          "Preprocessor",
-          `nostdinc:${model.cpp.doNotSearchSystemDirectories} nostdinc++:${model.cpp.doNotSearchSystemCppDirectories} preprocessOnly:${model.cpp.preprocessOnly}`,
-        ),
-        this.createListSection("Include Paths", model.cpp.includePaths),
-        this.createListSection("System Include Paths", model.cpp.includeSystemPaths),
-        this.createListSection("Include Files", model.cpp.includeFiles),
-        this.createListSection("Defined Symbols", model.cpp.definedSymbols),
-        this.createListSection("Undefined Symbols", model.cpp.undefinedSymbols),
-        this.createListSection("Optimization Flags", model.cpp.optimizationFlags),
-        this.createListSection("Warning Flags", model.cpp.warningFlags),
-        this.createListSection("Debugging Flags", model.cpp.debuggingFlags),
-        this.createLeaf(
-          "Misc",
-          `listing:${model.cpp.generateAssemblerListing} temps:${model.cpp.saveTemporaryFiles} verbose:${model.cpp.verbose}`,
-        ),
-        this.createListSection("Other Flags", model.cpp.otherCompilerFlags),
-        this.createListSection("Args", model.cpp.args),
-      ]),
-      this.createSection("Linker", [
-        this.createLeaf("Script", model.linker.linkerScript),
-        this.createLeaf("Map", model.linker.generateMap),
-        this.createLeaf(
-          "Options",
-          `nostart:${model.linker.doNotUseStandardStartFiles} nodefault:${model.linker.doNotUseDefaultLibraries} nostd:${model.linker.noStartupOrDefaultLibs}`,
-        ),
-        this.createLeaf(
-          "Specs",
-          `nano:${model.linker.useNewlibNano} nosys:${model.linker.doNotUseSyscalls} printfFloat:${model.linker.useFloatWithNanoPrintf} scanfFloat:${model.linker.useFloatWithNanoScanf}`,
-        ),
-        this.createLeaf(
-          "Misc",
-          `cref:${model.linker.crossReference} printMap:${model.linker.printLinkMap} verbose:${model.linker.verbose} picolibc:${model.linker.picolibc || "-"}`,
-        ),
-        this.createLeaf(
-          "WCH Extras",
-          `printfloat:${model.linker.useWchPrintffloat} printf:${model.linker.useWchPrintf} iqmath:${model.linker.useIqmath}`,
-        ),
-        this.createListSection("Libraries", model.linker.libraries),
-        this.createListSection("Library Paths", model.linker.librarySearchPaths),
-        this.createListSection("Linker Flags", model.linker.linkerFlags),
-        this.createListSection("Other Flags", model.linker.otherLinkerFlags),
-        this.createListSection("Other Objects", model.linker.otherObjects),
-        this.createListSection("Args", model.linker.args),
-      ]),
-      this.createSection("Post Build", [
-        this.createLeaf(
-          "Flash",
-          `enabled:${model.postBuild.createFlash} format:${model.postBuild.flashOutputFormat || "-"}`,
-        ),
-        this.createLeaf(
-          "Flash Sections",
-          `text:${model.postBuild.copyOnlySectionText} data:${model.postBuild.copyOnlySectionData}`,
-        ),
-        this.createListSection("Flash Only Sections", model.postBuild.copyOnlySections),
-        this.createListSection("Flash Flags", model.postBuild.flashFlags),
-        this.createListSection("Flash Args", model.postBuild.flashArgs),
-        this.createLeaf("List", `enabled:${model.postBuild.createList}`),
-        this.createListSection("List Flags", model.postBuild.listFlags),
-        this.createListSection("List Args", model.postBuild.listArgs),
-        this.createLeaf(
-          "Size",
-          `enabled:${model.postBuild.printSize} format:${model.postBuild.sizeFormat || "-"}`,
-        ),
-        this.createListSection("Size Flags", model.postBuild.sizeFlags),
-        this.createListSection("Size Args", model.postBuild.sizeArgs),
+      this.createSection("Debug", [
+        this.createLeaf("OpenOCD", model.debug.openOcdExecutable),
+        this.createLeaf("Host", model.debug.host),
+        this.createLeaf("GDB Port", String(model.debug.gdbPort || "")),
+        this.createLeaf("Stop At", model.debug.stopAt),
       ]),
       this.createSection("Flash", [
         this.createLeaf("Target", model.flash.targetPath),
@@ -327,13 +192,13 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
 
   private createOpenInMounRiverStudioItem(model: WchProjectModel): SidebarItem {
     const item = new SidebarItem("Open in MRS2");
-    item.description = model.project.name || model.baseName;
-    item.tooltip = `使用 MounRiver Studio 2 打开：${model.files.wvproj}`;
+    item.description = model.identity.name || model.identity.baseName;
+    item.tooltip = `使用 MounRiver Studio 2 打开：${model.identity.files.wvproj}`;
     item.iconPath = new vscode.ThemeIcon("window");
     item.command = {
       command: OPEN_IN_MOUN_RIVER_STUDIO_COMMAND,
       title: "Open in MRS2",
-      arguments: [model.files.wvproj],
+      arguments: [model.identity.files.wvproj],
     };
     return item;
   }
@@ -400,13 +265,13 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
 
   // 构建产物名优先显示完整输出文件，缺失时退回 name + extension。
   private buildArtifactName(model: WchProjectModel): string {
-    if (!model.project.artifact.name) {
+    if (!model.build.artifact.name) {
       return "";
     }
 
-    return model.project.artifact.extension
-      ? `${model.project.artifact.name}.${model.project.artifact.extension}`
-      : model.project.artifact.name;
+    return model.build.artifact.extension
+      ? `${model.build.artifact.name}.${model.build.artifact.extension}`
+      : model.build.artifact.name;
   }
 
   // 侧栏悬停信息展示检测明细，便于定位规则是否命中。
