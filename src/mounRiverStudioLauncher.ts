@@ -3,10 +3,11 @@ import {
   getConfiguredMounRiverStudioPath,
   resolveMounRiverStudioExecutable,
 } from "./build/buildShared";
+import { t } from "./i18n";
 
 export const OPEN_IN_MOUN_RIVER_STUDIO_COMMAND = "wchVscode.openInMounRiverStudio";
 
-const outputChannel = vscode.window.createOutputChannel("wch-vscode MRS2");
+const outputChannel = vscode.window.createOutputChannel(t("mrs2.outputChannel"));
 let hiddenMrsTerminal: vscode.Terminal | undefined;
 
 vscode.window.onDidCloseTerminal((terminal) => {
@@ -16,7 +17,7 @@ vscode.window.onDidCloseTerminal((terminal) => {
 });
 
 export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<void> {
-  outputChannel.appendLine(`[${new Date().toISOString()}] Open in MRS2 requested`);
+  outputChannel.appendLine(`[${new Date().toISOString()}] ${t("mrs2.openRequested")}`);
   outputChannel.appendLine(`wvprojPath: ${wvprojPath}`);
 
   const mounRiverStudioPath = getConfiguredMounRiverStudioPath();
@@ -27,14 +28,14 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
 
   if (!executablePath) {
     outputChannel.show(true);
-    void vscode.window.showErrorMessage("请先配置 wchVscode.mounRiverStudioPath");
+    void vscode.window.showErrorMessage(t("setting.mounRiverStudioPathRequired"));
     return;
   }
 
   if (!await fileExists(executablePath)) {
     outputChannel.appendLine("executable exists: false");
     outputChannel.show(true);
-    void vscode.window.showErrorMessage(`MRS2 安装路径无效，未找到主程序：${executablePath}`);
+    void vscode.window.showErrorMessage(t("error.mrs2ExecutableMissing", { filePath: executablePath }));
     return;
   }
   outputChannel.appendLine("executable exists: true");
@@ -42,7 +43,7 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
   if (!await fileExists(wvprojPath)) {
     outputChannel.appendLine("wvproj exists: false");
     outputChannel.show(true);
-    void vscode.window.showErrorMessage(`未找到 .wvproj 文件：${wvprojPath}`);
+    void vscode.window.showErrorMessage(t("error.wvprojMissing", { filePath: wvprojPath }));
     return;
   }
   outputChannel.appendLine("wvproj exists: true");
@@ -53,7 +54,7 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
     const opened = await vscode.env.openExternal(projectUri);
     outputChannel.appendLine(`openExternal result: ${opened}`);
     if (opened) {
-      void vscode.window.showInformationMessage("WCH: 已在 MRS2 打开项目");
+      void vscode.window.showInformationMessage(t("message.mrs2ProjectOpened"));
       return;
     }
 
@@ -61,11 +62,11 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
     outputChannel.appendLine(`hidden terminal command: ${command}`);
     const terminal = getOrCreateHiddenTerminal(mounRiverStudioPath);
     terminal.sendText(command);
-    void vscode.window.showInformationMessage("WCH: 已在 MRS2 打开项目");
+    void vscode.window.showInformationMessage(t("message.mrs2ProjectOpened"));
   } catch (error) {
     outputChannel.appendLine(`terminal launch threw: ${asErrorMessage(error)}`);
     outputChannel.show(true);
-    void vscode.window.showErrorMessage(`打开 MRS2 失败：${asErrorMessage(error)}`);
+    void vscode.window.showErrorMessage(t("error.mrs2OpenFailed", { message: asErrorMessage(error) }));
   }
 }
 
@@ -75,7 +76,7 @@ function getOrCreateHiddenTerminal(cwd: string): vscode.Terminal {
   }
 
   hiddenMrsTerminal = vscode.window.createTerminal({
-    name: "Open MRS2",
+    name: t("mrs2.terminalName"),
     shellPath: "cmd.exe",
     shellArgs: ["/Q"],
     cwd,

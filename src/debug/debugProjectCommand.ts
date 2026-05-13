@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { buildCurrentProjectAndWait } from "../build/buildProjectTask";
 import { resolveBuildProjectForExecution, resolveCurrentBuildTarget } from "../build/buildProjectResolver";
+import { t } from "../i18n";
 import { buildWchRiscvDebugLaunchConfig } from "./debugConfig";
 import { logDebug, showDebugLog } from "./debugLog";
 
@@ -11,36 +12,39 @@ export function getCurrentDebugTargetTooltip(
 ): string {
   const resolution = resolveCurrentBuildTarget(editor);
   if (!resolution.target) {
-    return resolution.error ?? "当前未找到可调试的 WCH 工程";
+    return resolution.error ?? t("error.noDebuggableWchProject");
   }
 
   const { model } = resolution.target;
-  return `Debug ${model.identity.name || model.identity.baseName}`;
+  return t("tooltip.actionTarget", {
+    action: t("action.debug"),
+    projectName: model.identity.name || model.identity.baseName,
+  });
 }
 
 export async function debugCurrentProject(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
 ): Promise<boolean> {
   showDebugLog(true);
-  logDebug("Debug command requested");
+  logDebug(t("debugLog.commandRequested"));
   const buildSucceeded = await buildCurrentProjectAndWait(editor, false);
   if (!buildSucceeded) {
-    logDebug("Debug command stopped because build failed");
+    logDebug(t("debugLog.stoppedBecauseBuildFailed"));
     return false;
   }
 
   try {
     const project = await resolveBuildProjectForExecution(editor);
-    logDebug(`Resolved debug project: ${project.model.identity.name || project.model.identity.baseName}`);
+    logDebug(t("debugLog.resolvedProject", { projectName: project.model.identity.name || project.model.identity.baseName }));
     logDebug(`ELF: ${project.elfPath}`);
     const launchConfig = await buildWchRiscvDebugLaunchConfig(project);
-    logDebug(`Starting VS Code debug session: ${launchConfig.name}`);
+    logDebug(t("debugLog.startingSession", { name: launchConfig.name }));
     const started = await vscode.debug.startDebugging(project.workspaceFolder, launchConfig);
-    logDebug(`VS Code debug session start result: ${started}`);
+    logDebug(t("debugLog.sessionStartResult", { started }));
     return started;
   } catch (error) {
     const message = asErrorMessage(error);
-    logDebug(`Debug command failed: ${message}`);
+    logDebug(t("debugLog.commandFailed", { message }));
     void vscode.window.showErrorMessage(message);
     return false;
   }

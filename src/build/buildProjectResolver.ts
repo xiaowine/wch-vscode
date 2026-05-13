@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { WchProjectModel } from '../models/WchProjectModel';
+import { t } from '../i18n';
 import { getWchProjectState } from '../projectState';
 import { getConfiguredMounRiverStudioPath, resolveToolchainPaths, type ResolvedToolchainPaths } from './buildShared';
 
@@ -14,9 +15,17 @@ const IGNORED_DIRECTORY_NAMES = new Set([
 
 type SourceLanguage = 'c' | 'cpp' | 'asm';
 
-type BuildTarget = {
+export type BuildTarget = {
 	workspaceFolder: vscode.WorkspaceFolder;
 	model: WchProjectModel;
+};
+
+export type BuildProjectSelector = {
+	folderPath?: string;
+	projectPath?: string;
+	wvprojPath?: string;
+	projectName?: string;
+	baseName?: string;
 };
 
 export type ResolvedSourceFile = {
@@ -67,7 +76,7 @@ export function resolveCurrentBuildTarget(
 	const targets = getBuildTargets();
 	if (targets.length === 0) {
 		const unsupportedProject = getSingleUnsupportedProjectMessage();
-		return unsupportedProject ? { error: unsupportedProject } : { error: '当前未找到可编译的 WCH 工程' };
+		return unsupportedProject ? { error: unsupportedProject } : { error: t('error.noBuildableWchProject') };
 	}
 
 	const activeFilePath = editor?.document.uri.scheme === 'file' ? editor.document.uri.fsPath : undefined;
@@ -77,7 +86,7 @@ export function resolveCurrentBuildTarget(
 			return { target: matchedTargets[0] };
 		}
 		if (matchedTargets.length > 1) {
-			return { error: '当前文件命中了多个可编译工程，请打开目标工程中的唯一文件后重试' };
+			return { error: t('error.currentFileMatchesMultipleProjects') };
 		}
 
 		const unsupportedMessage = getUnsupportedProjectMessageForFile(activeFilePath);
@@ -106,7 +115,7 @@ export function resolveCurrentBuildTarget(
 		return { target: targets[0] };
 	}
 
-	return { error: '当前无法定位唯一的可编译 WCH 工程，请先打开目标工程中的文件' };
+	return { error: t('error.cannotLocateUniqueBuildProject') };
 }
 
 export async function resolveBuildProjectForExecution(
@@ -114,47 +123,101 @@ export async function resolveBuildProjectForExecution(
 ): Promise<ResolvedBuildProject> {
 	const resolution = resolveCurrentBuildTarget(editor);
 	if (!resolution.target) {
-		throw new Error(resolution.error ?? '当前无法定位可编译工程');
+		throw new Error(resolution.error ?? t('error.cannotLocateBuildProject'));
 	}
 
-	const { workspaceFolder, model } = resolution.target;
+	return resolveBuildTargetForExecution(resolution.target);
+}
+
+export async function resolveBuildProjectForExecutionBySelector(
+	selector: BuildProjectSelector,
+): Promise<ResolvedBuildProject> {
+	const resolution = resolveBuildTargetBySelector(selector);
+	if (!resolution.target) {
+		throw new Error(resolution.error ?? t('error.cannotLocateBuildProject'));
+	}
+
+	return resolveBuildTargetForExecution(resolution.target);
+}
+
+function resolveBuildTargetBySelector(selector: BuildProjectSelector): BuildTargetResolution {
+	const targets = getBuildTargets();
+	if (targets.length === 0) {
+		const unsupportedProject = getSingleUnsupportedProjectMessage();
+		return unsupportedProject ? { error: unsupportedProject } : { error: t('error.noBuildableWchProject') };
+	}
+
+	const folderPath = selector.folderPath ?? selector.projectPath;
+	const wvprojPath = selector.wvprojPath;
+	const projectName = selector.projectName;
+	const baseName = selector.baseName;
+	const matchedTargets = targets.filter((target) => {
+		if (folderPath && path.resolve(target.model.identity.folderPath) !== path.resolve(folderPath)) {
+			return false;
+		}
+		if (wvprojPath && path.resolve(target.model.identity.files.wvproj) !== path.resolve(wvprojPath)) {
+			return false;
+		}
+		if (projectName && target.model.identity.name !== projectName) {
+			return false;
+		}
+		if (baseName && target.model.identity.baseName !== baseName) {
+			return false;
+		}
+		return true;
+	});
+
+	if (matchedTargets.length === 1) {
+		return { target: matchedTargets[0] };
+	}
+	if (matchedTargets.length === 0) {
+		return { error: t('error.noMatchingBuildProject') };
+	}
+
+	return { error: t('error.selectorMatchesMultipleProjects') };
+}
+
+async function resolveBuildTargetForExecution(
+	target: BuildTarget,
+): Promise<ResolvedBuildProject> {
+	const { workspaceFolder, model } = target;
 	if (model.target.toolchain.toUpperCase() !== 'RISC-V') {
-		throw new Error('不支持，仅支持 RISC-V 工程');
+		throw new Error(t('error.unsupportedRiscvOnly'));
 	}
 
 	const outputDirectoryName = model.build.configName.trim();
 	if (!outputDirectoryName) {
-		throw new Error('当前工程缺少 build.configName，无法生成构建目录');
+		throw new Error(t('error.missingBuildConfigNameForBuildDirectory'));
 	}
 
 	const mounRiverStudioPath = getConfiguredMounRiverStudioPath();
 	if (!mounRiverStudioPath) {
-		throw new Error('请先配置 wchVscode.mounRiverStudioPath');
+		throw new Error(t('setting.mounRiverStudioPathRequired'));
 	}
 
 	const toolchainPaths = resolveToolchainPaths(mounRiverStudioPath, model);
 	if (!toolchainPaths) {
-		throw new Error('不支持当前工具链版本');
+		throw new Error(t('error.toolchainVersionUnsupported'));
 	}
 
 	if (!await fileExists(toolchainPaths.make)) {
-		throw new Error('MRS 安装路径无效，未找到 make.exe');
+		throw new Error(t('error.makeMissing'));
 	}
 
 	const linkerScriptValue = model.build.linker.script;
 	if (!linkerScriptValue) {
-		throw new Error('当前工程缺少链接脚本');
+		throw new Error(t('error.linkerScriptMissing'));
 	}
 
 	const linkerScriptPath = resolveProjectFileSystemPath(model, linkerScriptValue);
 	if (!await fileExists(linkerScriptPath)) {
-		throw new Error(`链接脚本不存在：${linkerScriptPath}`);
+		throw new Error(t('error.linkerScriptNotFound', { filePath: linkerScriptPath }));
 	}
 
 	const outputDirectory = path.join(model.identity.folderPath, outputDirectoryName);
 	const sources = await discoverSourceFiles(model, outputDirectory);
 	if (sources.length === 0) {
-		throw new Error('未发现可编译源码');
+		throw new Error(t('error.noSourceFiles'));
 	}
 
 	const artifactPaths = resolveBuildArtifactPaths(model);
@@ -175,7 +238,7 @@ export async function resolveBuildProjectForExecution(
 export function resolveBuildArtifactPaths(model: WchProjectModel): BuildArtifactPaths {
 	const outputDirectoryName = model.build.configName.trim();
 	if (!outputDirectoryName) {
-		throw new Error('当前工程缺少 build.configName，无法生成构建目录');
+		throw new Error(t('error.missingBuildConfigNameForBuildDirectory'));
 	}
 
 	const outputDirectory = path.join(model.identity.folderPath, outputDirectoryName);

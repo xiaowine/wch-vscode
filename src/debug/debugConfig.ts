@@ -7,6 +7,7 @@ import {
   resolveOpenOcdPaths,
   type ResolvedOpenOcdPaths,
 } from "../build/buildShared";
+import { t } from "../i18n";
 import { logDebug } from "./debugLog";
 
 export type WchRiscvDebugLaunchConfig = {
@@ -33,7 +34,7 @@ export async function buildWchRiscvDebugLaunchConfig(
   const mounRiverStudioPath = getConfiguredMounRiverStudioPath();
   const openOcdPaths = resolveOpenOcdPaths(mounRiverStudioPath);
   if (!openOcdPaths) {
-    throw new Error("请先配置 wchVscode.mounRiverStudioPath");
+    throw new Error(t("setting.mounRiverStudioPathRequired"));
   }
 
   const gdbPath = project.toolchainPaths.gdb;
@@ -50,14 +51,14 @@ export async function buildWchRiscvDebugLaunchConfig(
   logDebug(`Stop at: ${project.model.debug.stopAt || "<disabled>"}`);
   logDebug(`WVProj path: ${project.model.identity.files.wvproj}`);
 
-  await assertFileExists(gdbPath, `MRS 安装路径无效，未找到 gdb.exe：${gdbPath}`);
-  await assertFileExists(openOcdPath, `MRS 安装路径无效，未找到 openocd.exe：${openOcdPath}`);
-  await assertFileExists(elfPath, `未找到 ELF 文件：${elfPath}`);
+  await assertFileExists(gdbPath, t("debugConfig.gdbMissing", { filePath: gdbPath }));
+  await assertFileExists(openOcdPath, t("debugConfig.openOcdMissing", { filePath: openOcdPath }));
+  await assertFileExists(elfPath, t("debugConfig.elfMissing", { filePath: elfPath }));
 
   return {
     type: "wch-riscv",
     request: "launch",
-    name: `Debug ${projectName}`,
+    name: t("debugConfig.launchName", { projectName }),
     projectName,
     cwd: project.model.identity.folderPath,
     elfPath,

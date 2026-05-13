@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
+import { t } from "../i18n";
 
-const outputChannel = vscode.window.createOutputChannel("WCH Debug");
+const outputChannel = vscode.window.createOutputChannel(t("debug.outputChannel"));
 
 export function logDebug(message: string): void {
   outputChannel.appendLine(`[${new Date().toISOString()}] ${message}`);

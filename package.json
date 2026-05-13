@@ -1,10 +1,23 @@
 {
   "name": "wch-vscode",
-  "displayName": "wch-vscode",
-  "description": "",
+  "displayName": "%extension.displayName%",
+  "description": "%extension.description%",
   "version": "0.0.1",
+  "publisher": "xiaowine",
+  "packageManager": "pnpm@11.1.0",
+  "license": "UNLICENSED",
+  "keywords": [
+    "wch",
+    "mounriver",
+    "risc-v",
+    "embedded",
+    "debug"
+  ],
   "activationEvents": [
     "onStartupFinished"
+  ],
+  "extensionKind": [
+    "workspace"
   ],
   "extensionDependencies": [
     "ms-vscode.cpptools"
@@ -13,6 +26,7 @@
     "vscode": "^1.118.0"
   },
   "categories": [
+    "Debuggers",
     "Other"
   ],
   "main": "./out/extension.js",
@@ -20,7 +34,8 @@
     "commands": [
       {
         "command": "wchVscode.refreshProjects",
-        "title": "Refresh Projects",
+        "title": "%command.refreshProjects%",
+        "category": "WCH",
         "icon": {
           "light": "media/refresh.svg",
           "dark": "media/refresh.svg"
@@ -28,37 +43,44 @@
       },
       {
         "command": "wchVscode.buildProject",
-        "title": "Build"
+        "title": "%command.build%",
+        "category": "WCH"
       },
       {
         "command": "wchVscode.cleanProject",
-        "title": "Clean"
+        "title": "%command.clean%",
+        "category": "WCH"
       },
       {
         "command": "wchVscode.cleanBuildProject",
-        "title": "Clean and Build"
+        "title": "%command.cleanBuild%",
+        "category": "WCH"
       },
       {
         "command": "wchVscode.downloadProject",
-        "title": "Download"
+        "title": "%command.download%",
+        "category": "WCH"
       },
       {
         "command": "wchVscode.buildDownloadProject",
-        "title": "Build and Download"
+        "title": "%command.buildDownload%",
+        "category": "WCH"
       },
       {
         "command": "wchVscode.debugProject",
-        "title": "Debug"
+        "title": "%command.debug%",
+        "category": "WCH"
       },
       {
         "command": "wchVscode.openInMounRiverStudio",
-        "title": "Open in MRS2"
+        "title": "%command.openInMrs2%",
+        "category": "WCH"
       }
     ],
     "debuggers": [
       {
         "type": "wch-riscv",
-        "label": "WCH RISC-V",
+        "label": "%debugger.wchRiscv%",
         "program": "./out/debug/wchRiscvDebugAdapter.js",
         "runtime": "node",
         "languages": [
@@ -72,7 +94,7 @@
       "activitybar": [
         {
           "id": "wchVscodeSidebar",
-          "title": "wch-vscode",
+          "title": "%viewContainer.title%",
           "icon": "media/wch-vscode-sidebar.svg"
         }
       ]
@@ -81,23 +103,24 @@
       "explorer": [
         {
           "id": "wchVscodeProjectFilesView",
-          "name": "WCH Files"
+          "name": "%view.projectFiles%"
         }
       ],
       "wchVscodeSidebar": [
         {
           "id": "wchVscodeSidebarView",
-          "name": "Overview"
+          "name": "%view.overview%"
         }
       ]
     },
     "configuration": {
-      "title": "wch-vscode",
+      "title": "%configuration.title%",
       "properties": {
         "wchVscode.mounRiverStudioPath": {
           "type": "string",
           "default": "",
-          "description": "MounRiver Studio 安装根目录，例如 F:\\MounRiver\\MounRiver_Studio2。生成 C/C++ 配置时会自动拼接出 resources\\app\\resources\\win32\\components\\WCH\\Toolchain\\RISC-V Embedded GCC\\bin\\riscv-none-embed-gcc.exe。"
+          "scope": "machine",
+          "description": "%configuration.mounRiverStudioPath.description%"
         }
       }
     },
@@ -116,10 +139,17 @@
       ]
     }
   },
+  "vsce": {
+    "dependencies": false,
+    "yarn": false
+  },
   "scripts": {
-    "vscode:prepublish": "pnpm run compile",
+    "clean": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\"",
+    "vscode:prepublish": "pnpm run clean && pnpm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "package": "pnpm dlx @vscode/vsce package --no-dependencies",
+    "publish": "pnpm dlx @vscode/vsce publish --no-dependencies",
     "pretest": "pnpm run compile && pnpm run lint",
     "lint": "eslint src",
     "test": "vscode-test"

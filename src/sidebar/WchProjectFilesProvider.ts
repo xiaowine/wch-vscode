@@ -3,6 +3,7 @@ import type { WchLinkedFolder, WchProjectModel } from "../models/WchProjectModel
 import type { ProjectDetectionResult } from "../projectDetection";
 import type { ParsedWchProject } from "../projectState";
 import { getWchProjectState } from "../projectState";
+import { t } from "../i18n";
 
 class FileTreeItem extends vscode.TreeItem {
   children?: FileTreeItem[];
@@ -77,10 +78,10 @@ export class WchProjectFilesProvider
         : vscode.TreeItemCollapsibleState.None,
     );
     item.description = isUnsupported
-      ? "Unsupported project"
+      ? t("sidebar.unsupportedProject")
       : result.isTargetProject
-      ? `${models.length} project`
-      : "Not matched";
+      ? t("sidebar.projectCount", { count: models.length })
+      : t("sidebar.notMatched");
     item.tooltip = result.folder.uri.fsPath;
     item.iconPath = new vscode.ThemeIcon(
       isUnsupported ? "error" : result.isTargetProject ? "root-folder-opened" : "warning",
@@ -89,7 +90,7 @@ export class WchProjectFilesProvider
     if (isUnsupported) {
       item.command = {
         command: "workbench.action.showCommands",
-        title: "Unsupported Project",
+        title: t("command.unsupportedProject"),
       };
       item.tooltip = project?.unsupportedReason ?? result.folder.uri.fsPath;
     } else if (result.isTargetProject) {
@@ -102,8 +103,8 @@ export class WchProjectFilesProvider
 
   // 工作区未打开时给出统一提示，避免资源管理器视图看起来像加载失败。
   private createEmptyWorkspaceItem(): FileTreeItem {
-    const item = new FileTreeItem("未打开工作区");
-    item.description = "请先打开要检测的项目目录";
+    const item = new FileTreeItem(t("sidebar.emptyWorkspace"));
+    item.description = t("sidebar.emptyWorkspaceDescription");
     item.iconPath = new vscode.ThemeIcon("folder-opened");
     return item;
   }
@@ -165,7 +166,7 @@ export class WchProjectFilesProvider
           this.createFileSystemItem(vscode.Uri.joinPath(directoryUri, name), fileType),
         );
     } catch {
-      const item = new FileTreeItem("读取目录失败");
+      const item = new FileTreeItem(t("sidebar.readDirectoryFailed"));
       item.description = directoryUri.fsPath;
       item.iconPath = new vscode.ThemeIcon("warning");
       return [item];
@@ -211,7 +212,7 @@ export class WchProjectFilesProvider
     } else {
       item.command = {
         command: "vscode.open",
-        title: "Open File",
+        title: t("command.openFile"),
         arguments: [fileUri],
       };
     }

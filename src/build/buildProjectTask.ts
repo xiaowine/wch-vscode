@@ -7,6 +7,7 @@ import {
 } from "./buildProjectResolver";
 import { generateBuildFiles } from "./makefileGenerator";
 import { executeTaskAndWait } from "./taskExecution";
+import { t } from "../i18n";
 
 export const BUILD_PROJECT_COMMAND = "wchVscode.buildProject";
 export const CLEAN_PROJECT_COMMAND = "wchVscode.cleanProject";
@@ -20,21 +21,24 @@ export function hasCurrentBuildTarget(
 
 export function getCurrentBuildTargetTooltip(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
-  actionLabel = "Build",
+  actionLabel = t("action.build"),
 ): string {
   const resolution = resolveCurrentBuildTarget(editor);
   if (!resolution.target) {
-    return resolution.error ?? "当前未找到可编译的 WCH 工程";
+    return resolution.error ?? t("error.noBuildableWchProject");
   }
 
   const { model } = resolution.target;
-  return `${actionLabel} ${model.identity.name || model.identity.baseName}`;
+  return t("tooltip.actionTarget", {
+    action: actionLabel,
+    projectName: model.identity.name || model.identity.baseName,
+  });
 }
 
 export async function buildCurrentProject(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
 ): Promise<void> {
-  const result = await runProjectBuild(editor, "Build", false, true);
+  const result = await runProjectBuild(editor, t("action.build"), false, true);
   showBuildResultMessage(result);
 }
 
@@ -42,12 +46,21 @@ export async function buildCurrentProjectAndWait(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
   showSuccessMessage = true,
 ): Promise<boolean> {
-  const result = await runProjectBuild(editor, "Build", false, true);
+  const result = await runProjectBuild(editor, t("action.build"), false, true);
   showBuildResultMessage(result, showSuccessMessage);
   if (result.started && result.exitCode === 0) {
     return true;
   }
   return false;
+}
+
+export async function buildResolvedProjectAndWait(
+  project: ResolvedBuildProject,
+  showSuccessMessage = true,
+): Promise<boolean> {
+  const result = await runResolvedProjectBuild(project, t("action.build"), false, true);
+  showBuildResultMessage(result, showSuccessMessage);
+  return result.started && result.exitCode === 0;
 }
 
 export async function cleanCurrentProject(
@@ -63,10 +76,10 @@ export async function cleanCurrentProject(
 
   try {
     await deleteOutputDirectory(outputDirectory);
-    void vscode.window.showInformationMessage("WCH: 清理成功");
+    void vscode.window.showInformationMessage(t("message.cleanSucceeded"));
   } catch (error) {
     void vscode.window.showErrorMessage(
-      `清理构建目录失败：${asErrorMessage(error)}`,
+      t("error.cleanOutputDirectoryFailed", { message: asErrorMessage(error) }),
     );
   }
 }
@@ -74,7 +87,7 @@ export async function cleanCurrentProject(
 export async function cleanBuildCurrentProject(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
 ): Promise<void> {
-  const result = await runProjectBuild(editor, "Clean Build", true, true);
+  const result = await runProjectBuild(editor, t("action.cleanBuild"), true, true);
   showBuildResultMessage(result);
 }
 
@@ -101,7 +114,7 @@ async function runProjectBuild(
       await deleteOutputDirectory(project.outputDirectory);
     } catch (error) {
       void vscode.window.showErrorMessage(
-        `清理构建目录失败：${asErrorMessage(error)}`,
+        t("error.cleanOutputDirectoryFailed", { message: asErrorMessage(error) }),
       );
       return { started: false };
     }
@@ -111,7 +124,45 @@ async function runProjectBuild(
     await generateBuildFiles(project);
   } catch (error) {
     void vscode.window.showErrorMessage(
-      `生成 makefile 失败：${asErrorMessage(error)}`,
+      t("error.generateMakefileFailed", { message: asErrorMessage(error) }),
+    );
+    return { started: false };
+  }
+
+  const task = createBuildTask(project, taskLabelPrefix);
+  if (waitForExit) {
+    return {
+      started: true,
+      exitCode: await executeTaskAndWait(task),
+    };
+  }
+
+  await vscode.tasks.executeTask(task);
+  return { started: true, exitCode: undefined };
+}
+
+async function runResolvedProjectBuild(
+  project: ResolvedBuildProject,
+  taskLabelPrefix: string,
+  cleanOutputDirectory = false,
+  waitForExit = false,
+): Promise<BuildRunResult> {
+  if (cleanOutputDirectory) {
+    try {
+      await deleteOutputDirectory(project.outputDirectory);
+    } catch (error) {
+      void vscode.window.showErrorMessage(
+        t("error.cleanOutputDirectoryFailed", { message: asErrorMessage(error) }),
+      );
+      return { started: false };
+    }
+  }
+
+  try {
+    await generateBuildFiles(project);
+  } catch (error) {
+    void vscode.window.showErrorMessage(
+      t("error.generateMakefileFailed", { message: asErrorMessage(error) }),
     );
     return { started: false };
   }
@@ -133,17 +184,17 @@ function resolveBuildOutputDirectory(
 ): string {
   const resolution = resolveCurrentBuildTarget(editor);
   if (!resolution.target) {
-    throw new Error(resolution.error ?? "当前无法定位可编译工程");
+    throw new Error(resolution.error ?? t("error.cannotLocateBuildProject"));
   }
 
   const { model } = resolution.target;
   if (model.target.toolchain.toUpperCase() !== "RISC-V") {
-    throw new Error("不支持，仅支持 RISC-V 工程");
+    throw new Error(t("error.unsupportedRiscvOnly"));
   }
 
   const outputDirectoryName = model.build.configName.trim();
   if (!outputDirectoryName) {
-    throw new Error("当前工程缺少 build.configName，无法定位构建目录");
+    throw new Error(t("error.missingBuildConfigNameForOutputDirectory"));
   }
 
   return path.join(model.identity.folderPath, outputDirectoryName);
@@ -232,13 +283,15 @@ function showBuildResultMessage(
 
   if (result.exitCode === 0) {
     if (showSuccessMessage) {
-      void vscode.window.showInformationMessage("WCH: 编译成功");
+      void vscode.window.showInformationMessage(t("message.buildSucceeded"));
     }
     return;
   }
 
   void vscode.window.showErrorMessage(
-    `编译失败，make 退出码：${result.exitCode ?? "未知"}`,
+    t("error.buildFailedWithExitCode", {
+      exitCode: result.exitCode ?? t("value.unknown"),
+    }),
   );
 }
 

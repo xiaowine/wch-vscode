@@ -15,6 +15,7 @@ import type {
   ParsedProjectFile,
   ParsedWchProject,
 } from "./projectState";
+import { t } from "./i18n";
 
 type LaunchAttributeMaps = {
   strings: Map<string, string>;
@@ -42,7 +43,7 @@ export function getUnsupportedProjectReason(
     const toolchain = getString(chipInfo?.toolchain)?.trim();
 
     if (toolchain && toolchain.toUpperCase() !== "RISC-V") {
-      return `暂不支持 ${toolchain} 工程，仅支持 RISC-V 工程`;
+      return t("project.unsupportedToolchain", { toolchain });
     }
   }
 

@@ -5,8 +5,11 @@ import { OPEN_IN_MOUN_RIVER_STUDIO_COMMAND } from "../mounRiverStudioLauncher";
 import type { ProjectDetectionResult } from "../projectDetection";
 import type { ParsedWchProject } from "../projectState";
 import { getWchProjectState } from "../projectState";
+import { t } from "../i18n";
 
 const COPY_SIDEBAR_VALUE_COMMAND = "wchVscode.copySidebarValue";
+const OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND =
+  "wchVscode.openMounRiverStudioPathSetting";
 
 class SidebarItem extends vscode.TreeItem {
   children?: SidebarItem[];
@@ -69,10 +72,10 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
     const isUnsupported = Boolean(project?.unsupportedReason);
     const item = new SidebarItem(result.folder.name);
     item.description = isUnsupported
-      ? "Unsupported project"
+      ? t("sidebar.unsupportedProject")
       : result.isTargetProject
-      ? "Matched project"
-      : "Not matched";
+      ? t("sidebar.matchedProject")
+      : t("sidebar.notMatched");
     item.tooltip = this.buildTooltip(result);
     item.iconPath = new vscode.ThemeIcon(
       isUnsupported ? "error" : result.isTargetProject ? "pass-filled" : "warning",
@@ -87,8 +90,9 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
       : vscode.TreeItemCollapsibleState.None;
     item.children = result.isTargetProject
       ? isUnsupported
-        ? [this.createUnsupportedItem(project?.unsupportedReason ?? "当前工程暂不支持")]
+        ? [this.createUnsupportedItem(project?.unsupportedReason ?? t("sidebar.unsupportedProjectFallback"))]
         : [
+          this.createMounRiverStudioPathSettingItem(),
           this.createGenerateCppToolsItem(result.folder, models),
           ...models.map((model) => this.createOpenInMounRiverStudioItem(model)),
           ...models.flatMap((model) => this.buildProjectModelItems(model)),
@@ -100,8 +104,8 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
 
   // 工作区未打开时给出统一提示，避免顶层出现空白视图。
   private createEmptyWorkspaceItem(): SidebarItem {
-    const item = new SidebarItem("未打开工作区");
-    item.description = "请先打开要检测的项目目录";
+    const item = new SidebarItem(t("sidebar.emptyWorkspace"));
+    item.description = t("sidebar.emptyWorkspaceDescription");
     item.iconPath = new vscode.ThemeIcon("folder-opened");
     return item;
   }
@@ -111,13 +115,13 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
     folder: vscode.WorkspaceFolder,
     models: WchProjectModel[],
   ): SidebarItem {
-    const item = new SidebarItem("Generate C/C++ Config");
+    const item = new SidebarItem(t("command.generateCppToolsConfig"));
     item.description = ".vscode/c_cpp_properties.json";
-    item.tooltip = "根据当前项目模型生成 cpptools 配置";
+    item.tooltip = t("sidebar.generateCppToolsConfigTooltip");
     item.iconPath = new vscode.ThemeIcon("gear");
     item.command = {
       command: GENERATE_CPPTOOLS_CONFIG_COMMAND,
-      title: "Generate C/C++ Config",
+      title: t("command.generateCppToolsConfig"),
       arguments: [folder, models],
     };
     return item;
@@ -125,7 +129,7 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
 
   // 当前只支持 RISC-V 工程，不支持的工程直接给出提示，不继续加载业务数据。
   private createUnsupportedItem(message: string): SidebarItem {
-    const item = new SidebarItem("当前工程不支持");
+    const item = new SidebarItem(t("sidebar.unsupportedProjectTitle"));
     item.description = message;
     item.tooltip = message;
     item.iconPath = new vscode.ThemeIcon("error");
@@ -141,47 +145,47 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
     root.description = model.target.mcu || model.target.architecture;
     root.iconPath = new vscode.ThemeIcon("project");
     root.children = [
-      this.createSection("Project", [
-        this.createLeaf("Name", model.identity.name),
-        this.createLeaf("Architecture", model.target.architecture),
+      this.createSection(t("sidebar.project"), [
+        this.createLeaf(t("sidebar.name"), model.identity.name),
+        this.createLeaf(t("sidebar.architecture"), model.target.architecture),
         this.createLeaf(
-          "Artifact",
+          t("sidebar.artifact"),
           model.build.artifact.outputFile || this.buildArtifactName(model),
         ),
         this.createListSection(
-          "Linked Folders",
+          t("sidebar.linkedFolders"),
           model.target.linkedFolders.map(
             (item) => `${item.name} -> ${item.location}`,
           ),
         ),
       ]),
-      this.createSection("Target", [
+      this.createSection(t("sidebar.target"), [
         this.createLeaf("MCU", model.target.mcu),
-        this.createLeaf("RTOS", model.target.rtos),
-        this.createLeaf("Toolchain", model.target.toolchain),
-        this.createLeaf("SVD", model.target.svdPath),
+        this.createLeaf(t("sidebar.rtos"), model.target.rtos),
+        this.createLeaf(t("sidebar.toolchain"), model.target.toolchain),
+        this.createLeaf(t("sidebar.svd"), model.target.svdPath),
       ]),
-      this.createSection("Build", [
-        this.createLeaf("Config", model.build.configName),
-        this.createLeaf("Toolchain", model.build.toolchainName),
+      this.createSection(t("sidebar.build"), [
+        this.createLeaf(t("sidebar.config"), model.build.configName),
+        this.createLeaf(t("sidebar.toolchain"), model.build.toolchainName),
         this.createLeaf(
-          "Target",
+          t("sidebar.target"),
           `${model.build.targetArchitecture} / ${model.build.targetAbi}`,
         ),
-        this.createLeaf("Output", model.build.configName),
-        this.createLeaf("Linker Script", model.build.linker.script),
+        this.createLeaf(t("sidebar.output"), model.build.configName),
+        this.createLeaf(t("sidebar.linkerScript"), model.build.linker.script),
       ]),
-      this.createSection("Debug", [
-        this.createLeaf("OpenOCD", model.debug.openOcdExecutable),
-        this.createLeaf("Host", model.debug.host),
-        this.createLeaf("GDB Port", String(model.debug.gdbPort || "")),
-        this.createLeaf("Stop At", model.debug.stopAt),
+      this.createSection(t("sidebar.debug"), [
+        this.createLeaf(t("sidebar.openOcd"), model.debug.openOcdExecutable),
+        this.createLeaf(t("sidebar.host"), model.debug.host),
+        this.createLeaf(t("sidebar.gdbPort"), String(model.debug.gdbPort || "")),
+        this.createLeaf(t("sidebar.stopAt"), model.debug.stopAt),
       ]),
-      this.createSection("Flash", [
-        this.createLeaf("Target", model.flash.targetPath),
-        this.createLeaf("Address", model.flash.address),
+      this.createSection(t("sidebar.flash"), [
+        this.createLeaf(t("sidebar.target"), model.flash.targetPath),
+        this.createLeaf(t("sidebar.address"), model.flash.address),
         this.createLeaf(
-          "Action",
+          t("sidebar.action.flash"),
           `erase:${model.flash.erase} program:${model.flash.program} verify:${model.flash.verify} reset:${model.flash.reset}`,
         ),
       ]),
@@ -191,14 +195,26 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
   }
 
   private createOpenInMounRiverStudioItem(model: WchProjectModel): SidebarItem {
-    const item = new SidebarItem("Open in MRS2");
+    const item = new SidebarItem(t("command.openInMrs2"));
     item.description = model.identity.name || model.identity.baseName;
-    item.tooltip = `使用 MounRiver Studio 2 打开：${model.identity.files.wvproj}`;
+    item.tooltip = t("sidebar.openInMrs2Tooltip", { filePath: model.identity.files.wvproj });
     item.iconPath = new vscode.ThemeIcon("window");
     item.command = {
       command: OPEN_IN_MOUN_RIVER_STUDIO_COMMAND,
-      title: "Open in MRS2",
+      title: t("command.openInMrs2"),
       arguments: [model.identity.files.wvproj],
+    };
+    return item;
+  }
+
+  private createMounRiverStudioPathSettingItem(): SidebarItem {
+    const item = new SidebarItem(t("command.openMounRiverStudioPathSetting"));
+    item.description = "wchVscode.mounRiverStudioPath";
+    item.tooltip = t("sidebar.openMounRiverStudioPathSettingTooltip");
+    item.iconPath = new vscode.ThemeIcon("settings-gear");
+    item.command = {
+      command: OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND,
+      title: t("command.openMounRiverStudioPathSetting"),
     };
     return item;
   }
@@ -277,16 +293,16 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
   // 侧栏悬停信息展示检测明细，便于定位规则是否命中。
   private buildTooltip(result: ProjectDetectionResult): string {
     const lines = [
-      `Folder: ${result.folder.uri.fsPath}`,
+      `${t("sidebar.folder")}: ${result.folder.uri.fsPath}`,
       `.cproject files: ${result.cprojectCount}`,
       `.launch files: ${result.launchCount}`,
       `.wvproj files: ${result.wvprojCount}`,
     ];
 
     if (result.matchingBaseNames.length > 0) {
-      lines.push(`Matched base names: ${result.matchingBaseNames.join(", ")}`);
+      lines.push(`${t("sidebar.matchedBaseNames")}: ${result.matchingBaseNames.join(", ")}`);
     } else {
-      lines.push("Matched base names: none");
+      lines.push(t("sidebar.matchedBaseNamesNone"));
     }
 
     return lines.join("\n");
@@ -296,11 +312,14 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
   private createCopyCommand(label: string, value: string): vscode.Command {
     return {
       command: COPY_SIDEBAR_VALUE_COMMAND,
-      title: "Copy Sidebar Value",
+      title: t("command.copySidebarValue"),
       arguments: [label, value],
     };
   }
 }
 
 // 导出复制命令 id，供扩展入口统一注册。
-export { COPY_SIDEBAR_VALUE_COMMAND };
+export {
+  COPY_SIDEBAR_VALUE_COMMAND,
+  OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND,
+};

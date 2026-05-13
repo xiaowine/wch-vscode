@@ -8,6 +8,7 @@ import {
   resolveProjectFileSystemPath,
 } from "./buildProjectResolver";
 import { executeTaskAndWait } from "./taskExecution";
+import { t } from "../i18n";
 
 export const DOWNLOAD_PROJECT_COMMAND = "wchVscode.downloadProject";
 
@@ -16,11 +17,14 @@ export function getCurrentDownloadTargetTooltip(
 ): string {
   const resolution = resolveCurrentBuildTarget(editor);
   if (!resolution.target) {
-    return resolution.error ?? "当前未找到可下载的 WCH 工程";
+    return resolution.error ?? t("error.noDownloadableWchProject");
   }
 
   const { model } = resolution.target;
-  return `Download ${model.identity.name || model.identity.baseName}`;
+  return t("tooltip.actionTarget", {
+    action: t("action.download"),
+    projectName: model.identity.name || model.identity.baseName,
+  });
 }
 
 export async function downloadCurrentProject(
@@ -35,26 +39,33 @@ export async function downloadCurrentProject(
     return false;
   }
 
+  return downloadResolvedProject(project, showSuccessMessage);
+}
+
+export async function downloadResolvedProject(
+  project: ResolvedBuildProject,
+  showSuccessMessage = true,
+): Promise<boolean> {
   const mounRiverStudioPath = getConfiguredMounRiverStudioPath();
   const openOcdPaths = resolveOpenOcdPaths(mounRiverStudioPath);
   if (!openOcdPaths) {
-    void vscode.window.showErrorMessage("请先配置 wchVscode.mounRiverStudioPath");
+    void vscode.window.showErrorMessage(t("setting.mounRiverStudioPathRequired"));
     return false;
   }
 
   if (!await fileExists(openOcdPaths.executable)) {
-    void vscode.window.showErrorMessage(`MRS 安装路径无效，未找到 openocd.exe：${openOcdPaths.executable}`);
+    void vscode.window.showErrorMessage(t("error.mrsOpenOcdExecutableMissing", { filePath: openOcdPaths.executable }));
     return false;
   }
 
   if (!await fileExists(openOcdPaths.config)) {
-    void vscode.window.showErrorMessage(`MRS 安装路径无效，未找到 OpenOCD 配置：${openOcdPaths.config}`);
+    void vscode.window.showErrorMessage(t("error.mrsOpenOcdConfigMissing", { filePath: openOcdPaths.config }));
     return false;
   }
 
   const downloadTargetPath = resolveDownloadTargetPath(project);
   if (!await fileExists(downloadTargetPath)) {
-    void vscode.window.showErrorMessage(`未找到可下载文件，请先构建工程：${downloadTargetPath}`);
+    void vscode.window.showErrorMessage(t("error.downloadTargetMissing", { filePath: downloadTargetPath }));
     return false;
   }
 
@@ -63,14 +74,17 @@ export async function downloadCurrentProject(
     const exitCode = await executeTaskAndWait(task);
     if (exitCode === 0) {
       if (showSuccessMessage) {
-        void vscode.window.showInformationMessage("WCH: 下载成功");
+        void vscode.window.showInformationMessage(t("message.downloadSucceeded"));
       }
       return true;
     }
 
-    void vscode.window.showErrorMessage(formatOpenOcdFailureMessage("下载失败", `OpenOCD 退出码：${exitCode ?? "未知"}`));
+    void vscode.window.showErrorMessage(formatOpenOcdFailureMessage(
+      t("error.operationDownloadFailed"),
+      t("error.openOcdExitCode", { exitCode: exitCode ?? t("value.unknown") }),
+    ));
   } catch (error) {
-    void vscode.window.showErrorMessage(formatOpenOcdFailureMessage("下载失败", asErrorMessage(error)));
+    void vscode.window.showErrorMessage(formatOpenOcdFailureMessage(t("error.operationDownloadFailed"), asErrorMessage(error)));
   }
   return false;
 }
@@ -99,7 +113,10 @@ function createDownloadTask(
       projectName: project.model.identity.name || project.model.identity.baseName,
     },
     project.workspaceFolder,
-    `Download ${project.model.identity.name || project.model.identity.baseName}`,
+    t("tooltip.actionTarget", {
+      action: t("action.download"),
+      projectName: project.model.identity.name || project.model.identity.baseName,
+    }),
     "wch-vscode",
     execution,
     [],
@@ -149,5 +166,5 @@ function asErrorMessage(error: unknown): string {
 }
 
 function formatOpenOcdFailureMessage(operation: string, detail: string): string {
-  return `${operation}：${detail}。请检查调试器是否被占用，并确认 WCH-Link 和目标板连接正常。`;
+  return t("error.openOcdFailure", { operation, detail });
 }

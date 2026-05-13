@@ -23,11 +23,6 @@ import type { ParsedWchProject } from "../projectState";
 suite("wch-vscode Test Suite", () => {
   vscode.window.showInformationMessage("Start wch-vscode tests.");
 
-  test("Sample check", () => {
-    assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-    assert.strictEqual(-1, [1, 2, 3].indexOf(0));
-  });
-
   test("resolveToolchainDirectoryName maps supported WCH toolchains", () => {
     assert.strictEqual(
       resolveToolchainDirectoryName("${WCH:Toolchain:GCC8}/bin/riscv-none-embed-gdb.exe"),
@@ -145,6 +140,10 @@ suite("wch-vscode Test Suite", () => {
       paths?.scripts,
       "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\share\\openocd\\scripts",
     );
+  });
+
+  test("openocd paths are not resolved without MounRiver Studio root", () => {
+    assert.strictEqual(resolveOpenOcdPaths(""), undefined);
   });
 
   test("openocd command paths use forward slashes for Tcl parsing", () => {
