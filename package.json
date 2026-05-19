@@ -124,6 +124,24 @@
         }
       }
     },
+    "keybindings": [
+      {
+        "command": "wchVscode.debugProject",
+        "key": "f5"
+      },
+      {
+        "command": "wchVscode.buildProject",
+        "key": "f7"
+      },
+      {
+        "command": "wchVscode.cleanBuildProject",
+        "key": "shift+f7"
+      },
+      {
+        "command": "wchVscode.downloadProject",
+        "key": "f8"
+      }
+    ],
     "menus": {
       "view/title": [
         {

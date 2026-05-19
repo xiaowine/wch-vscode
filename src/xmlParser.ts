@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { XMLParser } from 'fast-xml-parser';
 import { buildWchProjectModels, getUnsupportedProjectReason } from './projectModelBuilder';
 import type { ParsedProjectPair, ParsedProjectFile, ParsedWchProject } from './projectState';
+import { t } from './i18n';
 
 const xmlParser = new XMLParser({
 	ignoreAttributes: false,
@@ -17,6 +18,7 @@ export async function parseMatchedProjectFiles(
 	launchFiles: vscode.Uri[],
 	wvprojFiles: vscode.Uri[],
 	matchingBaseNames: string[],
+	unconfiguredWvprojFiles: vscode.Uri[],
 ): Promise<ParsedWchProject> {
 	const cprojectResults = await Promise.all(cprojectFiles.map((file) => parseXmlFile(file)));
 	const launchMap = await createLaunchFileMap(launchFiles);
@@ -48,6 +50,10 @@ export async function parseMatchedProjectFiles(
 
 	project.models = buildWchProjectModels(project);
 	project.unsupportedReason = getUnsupportedProjectReason(project);
+	if (project.models.length === 0 && project.projectPairs.length === 0 && unconfiguredWvprojFiles.length > 0) {
+		project.unsupportedReason = t('error.projectDownloadNotConfigured');
+		project.configurationWvprojPath = unconfiguredWvprojFiles[0].fsPath;
+	}
 	return project;
 }
 

@@ -75,8 +75,8 @@ export function resolveCurrentBuildTarget(
 ): BuildTargetResolution {
 	const targets = getBuildTargets();
 	if (targets.length === 0) {
-		const unsupportedProject = getSingleUnsupportedProjectMessage();
-		return unsupportedProject ? { error: unsupportedProject } : { error: t('error.noBuildableWchProject') };
+		const unsupportedMessage = getSingleUnsupportedProjectMessage();
+		return unsupportedMessage ? { error: unsupportedMessage } : { error: t('error.noBuildableWchProject') };
 	}
 
 	const activeFilePath = editor?.document.uri.scheme === 'file' ? editor.document.uri.fsPath : undefined;
@@ -143,8 +143,8 @@ export async function resolveBuildProjectForExecutionBySelector(
 function resolveBuildTargetBySelector(selector: BuildProjectSelector): BuildTargetResolution {
 	const targets = getBuildTargets();
 	if (targets.length === 0) {
-		const unsupportedProject = getSingleUnsupportedProjectMessage();
-		return unsupportedProject ? { error: unsupportedProject } : { error: t('error.noBuildableWchProject') };
+		const unsupportedMessage = getSingleUnsupportedProjectMessage();
+		return unsupportedMessage ? { error: unsupportedMessage } : { error: t('error.noBuildableWchProject') };
 	}
 
 	const folderPath = selector.folderPath ?? selector.projectPath;

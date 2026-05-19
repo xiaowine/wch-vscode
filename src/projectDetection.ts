@@ -17,6 +17,7 @@ export type ProjectDetectionResult = {
 	launchFiles: vscode.Uri[];
 	wvprojFiles: vscode.Uri[];
 	matchingBaseNames: string[];
+	unconfiguredWvprojFiles: vscode.Uri[];
 	isTargetProject: boolean;
 };
 
@@ -47,6 +48,7 @@ export async function refreshWchProjectState(): Promise<void> {
 					result.launchFiles,
 					result.wvprojFiles,
 					result.matchingBaseNames,
+					result.unconfiguredWvprojFiles,
 				),
 			),
 	);
@@ -97,6 +99,7 @@ async function detectProjectInFolder(folder: vscode.WorkspaceFolder): Promise<Pr
 	);
 
 	const launchBaseNames = new Set(launchFiles.map((file) => getBaseName(file, '.launch')));
+	const wvprojBaseNames = new Set(wvprojFiles.map((file) => getBaseName(file, '.wvproj')));
 	const matchingBaseNames = Array.from(
 		new Set(
 			wvprojFiles
@@ -104,6 +107,9 @@ async function detectProjectInFolder(folder: vscode.WorkspaceFolder): Promise<Pr
 				.filter((name) => launchBaseNames.has(name)),
 		),
 	).sort();
+	const unconfiguredWvprojFiles = wvprojFiles
+		.filter((file) => !launchBaseNames.has(getBaseName(file, '.wvproj')))
+		.sort((left, right) => left.fsPath.localeCompare(right.fsPath, 'en'));
 
 	return {
 		folder,
@@ -114,7 +120,8 @@ async function detectProjectInFolder(folder: vscode.WorkspaceFolder): Promise<Pr
 		launchFiles,
 		wvprojFiles,
 		matchingBaseNames,
-		isTargetProject: cprojectFiles.length > 0 && matchingBaseNames.length > 0,
+		unconfiguredWvprojFiles,
+		isTargetProject: cprojectFiles.length > 0 && wvprojBaseNames.size > 0,
 	};
 }
 

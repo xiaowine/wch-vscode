@@ -90,7 +90,7 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
       : vscode.TreeItemCollapsibleState.None;
     item.children = result.isTargetProject
       ? isUnsupported
-        ? [this.createUnsupportedItem(project?.unsupportedReason ?? t("sidebar.unsupportedProjectFallback"))]
+        ? this.buildUnsupportedProjectItems(project)
         : [
           this.createMounRiverStudioPathSettingItem(),
           this.createGenerateCppToolsItem(result.folder, models),
@@ -128,6 +128,17 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
   }
 
   // 当前只支持 RISC-V 工程，不支持的工程直接给出提示，不继续加载业务数据。
+  private buildUnsupportedProjectItems(project?: ParsedWchProject): SidebarItem[] {
+    const items = [
+      this.createUnsupportedItem(project?.unsupportedReason ?? t("sidebar.unsupportedProjectFallback")),
+    ];
+    if (project?.configurationWvprojPath) {
+      items.push(this.createOpenInMounRiverStudioPathItem(project.configurationWvprojPath));
+    }
+
+    return items;
+  }
+
   private createUnsupportedItem(message: string): SidebarItem {
     const item = new SidebarItem(t("sidebar.unsupportedProjectTitle"));
     item.description = message;
@@ -195,14 +206,24 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
   }
 
   private createOpenInMounRiverStudioItem(model: WchProjectModel): SidebarItem {
+    return this.createOpenInMounRiverStudioPathItem(
+      model.identity.files.wvproj,
+      model.identity.name || model.identity.baseName,
+    );
+  }
+
+  private createOpenInMounRiverStudioPathItem(
+    wvprojPath: string,
+    description = ".wvproj",
+  ): SidebarItem {
     const item = new SidebarItem(t("command.openInMrs2"));
-    item.description = model.identity.name || model.identity.baseName;
-    item.tooltip = t("sidebar.openInMrs2Tooltip", { filePath: model.identity.files.wvproj });
+    item.description = description;
+    item.tooltip = t("sidebar.openInMrs2Tooltip", { filePath: wvprojPath });
     item.iconPath = new vscode.ThemeIcon("window");
     item.command = {
       command: OPEN_IN_MOUN_RIVER_STUDIO_COMMAND,
       title: t("command.openInMrs2"),
-      arguments: [model.identity.files.wvproj],
+      arguments: [wvprojPath],
     };
     return item;
   }

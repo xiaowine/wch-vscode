@@ -1,6 +1,9 @@
 import * as vscode from "vscode";
 import { buildCurrentProjectAndWait } from "../build/buildProjectTask";
-import { resolveBuildProjectForExecution, resolveCurrentBuildTarget } from "../build/buildProjectResolver";
+import {
+  resolveBuildProjectForExecution,
+  resolveCurrentBuildTarget,
+} from "../build/buildProjectResolver";
 import { t } from "../i18n";
 import { buildWchRiscvDebugLaunchConfig } from "./debugConfig";
 import { logDebug, showDebugLog } from "./debugLog";

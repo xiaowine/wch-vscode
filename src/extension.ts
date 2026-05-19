@@ -49,6 +49,7 @@ import {
 import { WchProjectFilesProvider } from "./sidebar/WchProjectFilesProvider";
 import type { WchProjectModel } from "./models/WchProjectModel";
 import { t } from "./i18n";
+import { showProjectConfigurationRequiredMessage } from "./projectConfigurationPrompt";
 
 type WchStatusBarItems = {
   targetInfo: vscode.StatusBarItem;
@@ -61,6 +62,7 @@ type WchStatusBarItems = {
 };
 
 const WCH_CONFIGURATION_SECTION = "wchVscode";
+const promptedConfigurationProjects = new Set<string>();
 
 export function activate(context: vscode.ExtensionContext) {
   // 扩展入口只负责组装侧栏和项目检测服务。
@@ -69,7 +71,10 @@ export function activate(context: vscode.ExtensionContext) {
   const projectFilesProvider = new WchProjectFilesProvider();
   const providers = [sidebarProvider, projectFilesProvider];
   const statusBarItems = createWchStatusBarItems();
-  const refreshStatusBarItems = () => updateBuildStatusBarItems(statusBarItems);
+  const refreshStatusBarItems = async () => {
+    updateBuildStatusBarItems(statusBarItems);
+    await showPendingProjectConfigurationPrompt();
+  };
   registerWorkspaceRefresh(providers, context, () =>
     refreshStatusBarItems(),
   );
@@ -214,16 +219,17 @@ async function initializeProjectState(
   }
 
   updateBuildStatusBarItems(statusBarItems);
+  await showPendingProjectConfigurationPrompt();
 }
 
 function registerCommandAndRefresh(
   command: string,
   callback: (...args: unknown[]) => Promise<unknown>,
-  afterCommand: () => void,
+  afterCommand: () => void | Promise<void>,
 ): vscode.Disposable {
   return vscode.commands.registerCommand(command, async (...args: unknown[]) => {
     const result = await callback(...args);
-    afterCommand();
+    await afterCommand();
     return result;
   });
 }
@@ -296,7 +302,13 @@ function createBuildStatusBarItem(
 }
 
 function updateBuildStatusBarItems(items: WchStatusBarItems): void {
-  updateTargetInfoStatusBarItem(items.targetInfo);
+  const resolution = resolveCurrentBuildTarget();
+  if (!resolution.target) {
+    hideWchStatusBarItems(items);
+    return;
+  }
+
+  updateTargetInfoStatusBarItem(items.targetInfo, resolution.target.model);
   items.clean.tooltip = getCurrentBuildTargetTooltip(undefined, t("action.clean"));
   items.clean.show();
   items.cleanBuild.tooltip = getCurrentBuildTargetTooltip(
@@ -316,14 +328,8 @@ function updateBuildStatusBarItems(items: WchStatusBarItems): void {
 
 function updateTargetInfoStatusBarItem(
   targetInfoStatusBarItem: vscode.StatusBarItem,
+  model: WchProjectModel,
 ): void {
-  const resolution = resolveCurrentBuildTarget();
-  if (!resolution.target) {
-    targetInfoStatusBarItem.hide();
-    return;
-  }
-
-  const { model } = resolution.target;
   const projectName = model.identity.name || model.identity.baseName;
   const mcuName = model.target.mcu || model.target.architecture;
   targetInfoStatusBarItem.text = `${projectName} · ${mcuName}`;
@@ -332,4 +338,27 @@ function updateTargetInfoStatusBarItem(
     mcuName,
   });
   targetInfoStatusBarItem.show();
+}
+
+function hideWchStatusBarItems(items: WchStatusBarItems): void {
+  for (const item of Object.values(items)) {
+    item.hide();
+  }
+}
+
+async function showPendingProjectConfigurationPrompt(): Promise<void> {
+  const project = getWchProjectState().projects.find(
+    (item) => item.configurationWvprojPath && item.unsupportedReason,
+  );
+  if (!project?.configurationWvprojPath || !project.unsupportedReason) {
+    return;
+  }
+
+  const wvprojPath = project.configurationWvprojPath;
+  if (promptedConfigurationProjects.has(wvprojPath)) {
+    return;
+  }
+
+  promptedConfigurationProjects.add(wvprojPath);
+  await showProjectConfigurationRequiredMessage(project.unsupportedReason, wvprojPath);
 }

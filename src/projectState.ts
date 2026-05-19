@@ -25,6 +25,7 @@ export type ParsedWchProject = {
 	projectPairs: ParsedProjectPair[];
 	models: WchProjectModel[];
 	unsupportedReason?: string;
+	configurationWvprojPath?: string;
 };
 
 // 统一保存检测结果和解析结果，供扩展内其他模块直接读取。

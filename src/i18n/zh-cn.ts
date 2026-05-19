@@ -47,6 +47,7 @@ export const messages = {
     "error.openOcdFailure": "{operation}：{detail}。请检查调试器是否被占用，并确认 WCH-Link 和目标板连接正常。",
     "error.openOcdExitCode": "OpenOCD 退出码：{exitCode}",
     "error.operationDownloadFailed": "下载失败",
+    "error.projectDownloadNotConfigured": "当前 MCU 工程还未配置下载，请先在 MRS2 中完成下载/调试配置。",
     "error.selectorMatchesMultipleProjects": "命中了多个可编译 WCH 工程，请提供更具体的 folderPath、wvprojPath、projectName 或 baseName",
     "error.toolchainVersionUnsupported": "不支持当前工具链版本",
     "error.unsupportedRiscvOnly": "不支持，仅支持 RISC-V 工程",
