@@ -2,10 +2,19 @@
   "name": "wch-vscode",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.0.1",
-  "publisher": "xiaowine",
+  "version": "0.0.2",
+  "publisher": "winerealms",
   "packageManager": "pnpm@11.1.0",
-  "license": "UNLICENSED",
+  "license": "GPL-3.0-only",
+  "icon": "media/wch-vscode-sidebar.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiaowine/wch-vscode"
+  },
+  "homepage": "https://github.com/xiaowine/wch-vscode",
+  "bugs": {
+    "url": "https://github.com/xiaowine/wch-vscode/issues"
+  },
   "keywords": [
     "wch",
     "mounriver",

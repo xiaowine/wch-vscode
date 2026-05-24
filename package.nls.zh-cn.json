@@ -1,0 +1,18 @@
+{
+  "extension.displayName": "WCH VS Code 扩展",
+  "extension.description": "在 VS Code 中构建、下载和调试 WCH MounRiver Studio 2 RISC-V 项目。",
+  "command.refreshProjects": "刷新项目",
+  "command.build": "构建",
+  "command.clean": "清理",
+  "command.cleanBuild": "清理并构建",
+  "command.download": "下载",
+  "command.buildDownload": "构建并下载",
+  "command.debug": "调试",
+  "command.openInMrs2": "在 MRS2 中打开",
+  "debugger.wchRiscv": "WCH RISC-V",
+  "viewContainer.title": "WCH VS Code 扩展",
+  "view.projectFiles": "WCH 文件",
+  "view.overview": "概览",
+  "configuration.title": "wch-vscode",
+  "configuration.mounRiverStudioPath.description": "MounRiver Studio 安装根目录，例如 F:\\MounRiver\\MounRiver_Studio2。生成 C/C++ 配置时会自动拼接出 resources\\app\\resources\\win32\\components\\WCH\\Toolchain\\RISC-V Embedded GCC\\bin\\riscv-none-embed-gcc.exe。"
+}
