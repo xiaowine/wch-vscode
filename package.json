@@ -2,7 +2,7 @@
   "name": "wch-vscode",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "winerealms",
   "packageManager": "pnpm@11.1.0",
   "license": "GPL-3.0-only",
