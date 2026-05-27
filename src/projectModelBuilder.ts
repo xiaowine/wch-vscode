@@ -629,8 +629,9 @@ function resolveStopAt(
   runCommands: Record<string, unknown> | null,
   _launchAttributes: LaunchAttributeMaps,
 ): string {
-  const runCommandSetBreak = getBoolean(runCommands?.setBreak);
-  return runCommandSetBreak === true ? getString(runCommands?.setBreakAt) ?? "" : "";
+  const _runCommandSetBreak = getBoolean(runCommands?.setBreak);
+  const _setBreakAt = getString(runCommands?.setBreakAt) ?? "";
+  return "";
 }
 
 // 从 .cproject 中抽取少量 .wvproj 没有或不够直观的构建信息。
@@ -868,8 +869,6 @@ function buildOptimizationLevelArgs(level: string): string[] {
       return ["-O3"];
     case "fast":
       return ["-Os"];
-    case "debug":
-      return ["-Og"];
     case "z":
       return ["-Oz"];
     default:

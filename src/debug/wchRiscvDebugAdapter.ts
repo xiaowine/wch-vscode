@@ -1,4 +1,8 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  spawn,
+  spawnSync,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { DebugProtocol } from "@vscode/debugprotocol";
@@ -18,6 +22,7 @@ type DapResponse = DebugProtocol.Response;
 type LaunchArgs = {
   projectName: string;
   cwd: string;
+  sourceRoots?: string[];
   elfPath: string;
   gdbPath: string;
   openOcdPath: string;
@@ -39,6 +44,11 @@ type SourceBreakpointState = {
 type VariableReference =
   | { kind: "locals"; frameId: number }
   | { kind: "expression"; frameId?: number; expression: string };
+
+type ResolvedSourceLocation = {
+  sourcePath: string;
+  line: number;
+};
 
 class WchRiscvDebugSession {
   private seq = 1;
@@ -62,6 +72,11 @@ class WchRiscvDebugSession {
   private readonly breakpoints = new Map<string, SourceBreakpointState>();
   private readonly stackFrames = new Map<number, MiTuple>();
   private readonly variableReferences = new Map<number, VariableReference>();
+  private readonly symbolSourceLocations = new Map<
+    string,
+    ResolvedSourceLocation | null
+  >();
+  private readonly symbolInstructionAddresses = new Map<string, number[]>();
   private stopAtBreakpointNumber: string | undefined;
   private configurationDone = false;
   private gdbReady = false;
@@ -228,9 +243,9 @@ class WchRiscvDebugSession {
       const debugConfigurations = asRecord(root?.debugConfigurations);
       const startup = asRecord(debugConfigurations?.startup);
       const runCommands = asRecord(startup?.runCommands);
-      const setBreak = getBoolean(runCommands?.setBreak);
-      const stopAt =
-        setBreak === true ? getPlainString(runCommands?.setBreakAt).trim() : "";
+      const _setBreak = getBoolean(runCommands?.setBreak);
+      const _stopAt = getPlainString(runCommands?.setBreakAt);
+      const stopAt = "";
       this.logDebugMessage(
         `Refreshed .wvproj StopAt: ${stopAt || "<disabled>"} (${wvprojPath})`,
       );
@@ -297,8 +312,8 @@ class WchRiscvDebugSession {
       }
       const id = this.nextFrameId++;
       this.stackFrames.set(id, tuple);
-      const sourcePath = this.resolveFrameSourcePath(tuple);
-      frames.push(this.buildStackFrame(id, tuple, sourcePath));
+      const location = this.resolveFrameLocation(tuple);
+      frames.push(this.buildStackFrame(id, tuple, location));
     }
 
     this.sendResponse(request, {
@@ -310,29 +325,41 @@ class WchRiscvDebugSession {
   private buildStackFrame(
     id: number,
     frame: MiTuple,
-    sourcePath: string,
+    location: ResolvedSourceLocation | undefined,
   ): DebugProtocol.StackFrame {
-    const line = this.getDisplayLine(frame, sourcePath);
+    const sourcePath = location?.sourcePath ?? "";
+    const line = this.getDisplayLine(frame, sourcePath, location?.line);
     return {
       id,
       name: this.formatFrameName(frame, sourcePath, line),
-      source: sourcePath
-        ? {
-            name: path.basename(sourcePath),
-            path: sourcePath,
-            sourceReference: 0,
-          }
-        : undefined,
+      source: this.createSource(sourcePath),
       line,
       column: 1,
     };
   }
 
-  private getDisplayLine(frame: MiTuple, sourcePath: string): number {
-    const rawLine =
+  private createSource(
+    sourcePath: string,
+  ): DebugProtocol.Source | undefined {
+    if (!sourcePath) {
+      return undefined;
+    }
+
+    return {
+      name: path.basename(sourcePath),
+      path: sourcePath,
+      sourceReference: 0,
+    };
+  }
+
+  private getDisplayLine(
+    frame: MiTuple,
+    sourcePath: string,
+    rawLine =
       Number.parseInt(getString(frame.line), 10) ||
       this.lastStoppedLocation?.line ||
-      1;
+      1,
+  ): number {
     if (!this.shouldDisplayStopAtLabelLine() || !sourcePath) {
       return rawLine;
     }
@@ -364,6 +391,11 @@ class WchRiscvDebugSession {
   }
 
   private resolveFrameSourcePath(frame: MiTuple): string {
+    const location = this.resolveFrameLocation(frame);
+    if (location?.sourcePath) {
+      return location.sourcePath;
+    }
+
     // 优先用 MI 返回的 fullname/file；缺失时再依赖最近一次 stopped 记录。
     const rawPath =
       getString(frame.fullname) ||
@@ -573,28 +605,33 @@ class WchRiscvDebugSession {
       return false;
     }
 
-    const line = Number.parseInt(getString(frame.line), 10);
-    if (!Number.isFinite(line)) {
+    const matchedStopAt = this.isCurrentStopAtFrame(frame);
+    this.captureStoppedFrame(frame);
+    const location = this.resolveFrameLocation(frame);
+    const line = location?.line ?? Number.parseInt(getString(frame.line), 10);
+    if (!Number.isFinite(line) && !matchedStopAt) {
       return false;
     }
 
-    const sourcePath = this.resolveFrameSourcePath(frame);
-    const breakpointNumber = this.breakpoints
-      .get(this.toBreakpointKey(sourcePath))
-      ?.gdbNumbersByLine.get(line);
-    if (!breakpointNumber && !this.isCurrentStopAtFrame(frame)) {
+    const sourcePath = location?.sourcePath ?? this.resolveFrameSourcePath(frame);
+    const breakpointNumber = Number.isFinite(line)
+      ? this.breakpoints
+          .get(this.toBreakpointKey(sourcePath))
+          ?.gdbNumbersByLine.get(line)
+      : undefined;
+    if (!breakpointNumber && !matchedStopAt) {
       return false;
     }
 
     this.lastStoppedBreakpointNumber =
       breakpointNumber || this.stopAtBreakpointNumber;
-    this.captureStoppedFrame(frame);
-    const displayLine = this.getDisplayLine(frame, sourcePath);
+    const displayLine = this.getDisplayLine(frame, sourcePath, line || 1);
     this.targetRunning = false;
     this.sendEvent("stopped", {
       reason: "breakpoint",
       threadId: 1,
       allThreadsStopped: true,
+      source: this.createSource(sourcePath),
       line: displayLine,
     });
     return true;
@@ -1020,15 +1057,17 @@ class WchRiscvDebugSession {
     if (frame) {
       this.captureStoppedFrame(frame);
     }
+    const location = frame ? this.resolveFrameLocation(frame) : undefined;
+    const sourcePath = location?.sourcePath ?? (frame ? this.resolveFrameSourcePath(frame) : "");
+    const line = frame
+      ? this.getDisplayLine(frame, sourcePath, location?.line ?? 1)
+      : this.lastStoppedLocation?.line;
     this.sendEvent("stopped", {
       reason: toDapStoppedReason(reason),
       threadId: 1,
       allThreadsStopped: true,
-      line: frame
-        ? Number.parseInt(getString(frame.line), 10) ||
-          this.lastStoppedLocation?.line ||
-          undefined
-        : this.lastStoppedLocation?.line,
+      source: this.createSource(sourcePath),
+      line,
     });
   }
 
@@ -1111,13 +1150,252 @@ class WchRiscvDebugSession {
 
   private captureStoppedFrame(frame: MiTuple): void {
     // stopped 事件里如果带了 frame，就用它覆盖 console 兜底位置，精度更高。
-    const file = getString(frame.fullname) || getString(frame.file);
-    const line = Number.parseInt(getString(frame.line), 10);
-    if (!file || !Number.isFinite(line)) {
+    const location = this.resolveFrameLocation(frame, false);
+    if (!location) {
       return;
     }
 
-    this.lastStoppedLocation = { file, line };
+    this.lastStoppedLocation = {
+      file: location.sourcePath,
+      line: location.line,
+    };
+  }
+
+  private resolveFrameLocation(
+    frame: MiTuple,
+    allowLastStoppedFallback = true,
+  ): ResolvedSourceLocation | undefined {
+    const rawPath = getString(frame.fullname) || getString(frame.file);
+    const line = Number.parseInt(getString(frame.line), 10);
+    if (rawPath && Number.isFinite(line)) {
+      return {
+        sourcePath: this.resolveSourcePath(rawPath),
+        line,
+      };
+    }
+
+    const func = getString(frame.func);
+    const address = getString(frame.addr);
+    if (func && func !== "??") {
+      const resolvedFromSymbol = this.resolveSourceLocationFromSymbol(
+        func,
+        address,
+      );
+      if (resolvedFromSymbol) {
+        return resolvedFromSymbol;
+      }
+    }
+
+    if (!allowLastStoppedFallback || !this.lastStoppedLocation) {
+      return undefined;
+    }
+
+    return {
+      sourcePath: this.resolveSourcePath(this.lastStoppedLocation.file),
+      line: this.lastStoppedLocation.line,
+    };
+  }
+
+  private resolveSourceLocationFromSymbol(
+    symbol: string,
+    address = "",
+  ): ResolvedSourceLocation | undefined {
+    const normalizedSymbol = symbol.trim();
+    if (!normalizedSymbol) {
+      return undefined;
+    }
+
+    if (this.symbolSourceLocations.has(normalizedSymbol)) {
+      return this.symbolSourceLocations.get(normalizedSymbol) ?? undefined;
+    }
+
+    const sourceRoots = this.getSourceRoots();
+    if (sourceRoots.length === 0) {
+      this.symbolSourceLocations.set(normalizedSymbol, null);
+      return undefined;
+    }
+
+    const sourcePath = sourceRoots
+      .map((rootPath) => this.findSourceFileContainingSymbol(rootPath, normalizedSymbol))
+      .find((value): value is string => Boolean(value));
+    if (!sourcePath) {
+      this.symbolSourceLocations.set(normalizedSymbol, null);
+      return undefined;
+    }
+
+    const line = this.resolveSourceLineFromAssemblyAddress(
+      sourcePath,
+      normalizedSymbol,
+      address,
+    ) ?? this.findSymbolLabelLine(sourcePath, normalizedSymbol);
+    if (!line) {
+      this.symbolSourceLocations.set(normalizedSymbol, null);
+      return undefined;
+    }
+
+    const location = { sourcePath, line };
+    this.symbolSourceLocations.set(normalizedSymbol, location);
+    return location;
+  }
+
+  private findSourceFileContainingSymbol(
+    rootPath: string,
+    symbol: string,
+  ): string | undefined {
+    const pending = [rootPath];
+    while (pending.length > 0) {
+      const currentPath = pending.pop();
+      if (!currentPath) {
+        continue;
+      }
+
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(currentPath, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      for (const entry of entries) {
+        const fullPath = path.join(currentPath, entry.name);
+        if (entry.isDirectory()) {
+          if (!shouldScanSourceDirectory(entry.name)) {
+            continue;
+          }
+          pending.push(fullPath);
+          continue;
+        }
+
+        if (!entry.isFile() || !isSourceLookupCandidate(fullPath)) {
+          continue;
+        }
+
+        if (this.findSymbolLabelLine(fullPath, symbol)) {
+          return fullPath;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private getSourceRoots(): string[] {
+    const configuredRoots = this.launchArgs?.sourceRoots ?? [];
+    const roots = configuredRoots.length > 0
+      ? configuredRoots
+      : [this.launchArgs?.cwd ?? process.cwd()];
+    return Array.from(new Set(
+      roots
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0 && fs.existsSync(value)),
+    ));
+  }
+
+  private resolveSourceLineFromAssemblyAddress(
+    sourcePath: string,
+    symbol: string,
+    address: string,
+  ): number | undefined {
+    if (!address || !isAssemblySourcePath(sourcePath)) {
+      return undefined;
+    }
+
+    const instructionAddresses = this.resolveSymbolInstructionAddresses(symbol);
+    if (!instructionAddresses || instructionAddresses.length === 0) {
+      return undefined;
+    }
+
+    const currentAddress = parseHexAddress(address);
+    if (currentAddress === undefined) {
+      return undefined;
+    }
+
+    const instructionIndex = instructionAddresses.findIndex(
+      (value) => value === currentAddress,
+    );
+    if (instructionIndex < 0) {
+      return undefined;
+    }
+
+    const instructionLines = this.buildAssemblyInstructionLineMap(
+      sourcePath,
+      symbol,
+    );
+    if (instructionLines.length === 0) {
+      return undefined;
+    }
+
+    return instructionLines[
+      Math.min(instructionIndex, instructionLines.length - 1)
+    ];
+  }
+
+  private resolveSymbolInstructionAddresses(symbol: string): number[] | undefined {
+    const cached = this.symbolInstructionAddresses.get(symbol);
+    if (cached) {
+      return cached;
+    }
+
+    const gdbPath = this.launchArgs?.gdbPath ?? "";
+    const elfPath = this.launchArgs?.elfPath ?? "";
+    if (!gdbPath || !elfPath) {
+      return undefined;
+    }
+
+    const result = spawnSync(
+      gdbPath,
+      ["-batch", elfPath, "-ex", `disassemble ${symbol}`],
+      {
+        encoding: "utf8",
+        windowsHide: true,
+      },
+    );
+    if (result.error || result.status !== 0) {
+      return undefined;
+    }
+
+    const addresses = result.stdout
+      .split(/\r?\n/)
+      .map((line) => /0x([0-9a-fA-F]+)/.exec(line)?.[1])
+      .filter((value): value is string => Boolean(value))
+      .map((value) => Number.parseInt(value, 16));
+    if (addresses.length === 0) {
+      return undefined;
+    }
+
+    this.symbolInstructionAddresses.set(symbol, addresses);
+    return addresses;
+  }
+
+  private buildAssemblyInstructionLineMap(
+    sourcePath: string,
+    symbol: string,
+  ): number[] {
+    try {
+      const lines = fs.readFileSync(sourcePath, "utf8").split(/\r?\n/);
+      const labelLine = this.findSymbolLabelLine(sourcePath, symbol);
+      if (!labelLine) {
+        return [];
+      }
+
+      const instructionLines: number[] = [];
+      for (let index = labelLine; index < lines.length; index++) {
+        const currentLineNumber = index + 1;
+        const currentLine = lines[index].trim();
+        if (currentLineNumber > labelLine && /^[A-Za-z_.$][\w.$]*\s*:$/.test(currentLine)) {
+          break;
+        }
+
+        const instructionCount = estimateAssemblyInstructionCount(currentLine);
+        for (let count = 0; count < instructionCount; count++) {
+          instructionLines.push(currentLineNumber);
+        }
+      }
+
+      return instructionLines;
+    } catch {
+      return [];
+    }
   }
 
   private gdbCommand(
@@ -1289,6 +1567,11 @@ function quoteMiArgument(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
+function normalizeStopAt(value: string): string {
+  const normalizedValue = value.trim();
+  return normalizedValue === "handle_reset" ? "" : normalizedValue;
+}
+
 function createThread(id: number, name: string): DebugProtocol.Thread {
   return { id, name };
 }
@@ -1327,6 +1610,52 @@ function escapeRegExp(value: string): string {
 function isAssemblySourcePath(sourcePath: string): boolean {
   const extension = path.extname(sourcePath).toLowerCase();
   return extension === ".s" || extension === ".asm";
+}
+
+function parseHexAddress(value: string): number | undefined {
+  const match = /^0x([0-9a-fA-F]+)$/.exec(value.trim());
+  return match ? Number.parseInt(match[1], 16) : undefined;
+}
+
+function estimateAssemblyInstructionCount(line: string): number {
+  const trimmedLine = line
+    .replace(/\/\*.*?\*\//g, "")
+    .replace(/[#;].*$/g, "")
+    .trim();
+  if (!trimmedLine) {
+    return 0;
+  }
+
+  if (
+    trimmedLine.startsWith(".") ||
+    /^[A-Za-z_.$][\w.$]*\s*:$/.test(trimmedLine)
+  ) {
+    return 0;
+  }
+
+  const opcode = trimmedLine.split(/\s+/, 1)[0].toLowerCase();
+  switch (opcode) {
+    case "la":
+    case "call":
+    case "tail":
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function isSourceLookupCandidate(filePath: string): boolean {
+  const extension = path.extname(filePath).toLowerCase();
+  return extension === ".s" || extension === ".asm" || extension === ".S".toLowerCase();
+}
+
+function shouldScanSourceDirectory(directoryName: string): boolean {
+  const normalizedName = directoryName.toLowerCase();
+  return normalizedName !== ".git" &&
+    normalizedName !== ".vscode" &&
+    normalizedName !== "obj" &&
+    normalizedName !== "bin" &&
+    normalizedName !== "out";
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

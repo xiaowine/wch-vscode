@@ -16,6 +16,7 @@ export type WchRiscvDebugLaunchConfig = {
   name: string;
   projectName: string;
   cwd: string;
+  sourceRoots: string[];
   elfPath: string;
   gdbPath: string;
   openOcdPath: string;
@@ -51,6 +52,12 @@ export async function buildWchRiscvDebugLaunchConfig(
   logDebug(`Stop at: ${project.model.debug.stopAt || "<disabled>"}`);
   logDebug(`WVProj path: ${project.model.identity.files.wvproj}`);
 
+  const sourceRoots = Array.from(new Set([
+    project.model.identity.folderPath,
+    ...project.model.target.linkedFolders.map((linkedFolder) =>
+      resolveProjectFileSystemPath(project.model, linkedFolder.location),
+    ),
+  ]));
   await assertFileExists(gdbPath, t("debugConfig.gdbMissing", { filePath: gdbPath }));
   await assertFileExists(openOcdPath, t("debugConfig.openOcdMissing", { filePath: openOcdPath }));
   await assertFileExists(elfPath, t("debugConfig.elfMissing", { filePath: elfPath }));
@@ -61,6 +68,7 @@ export async function buildWchRiscvDebugLaunchConfig(
     name: t("debugConfig.launchName", { projectName }),
     projectName,
     cwd: project.model.identity.folderPath,
+    sourceRoots,
     elfPath,
     gdbPath,
     openOcdPath,

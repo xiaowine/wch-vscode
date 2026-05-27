@@ -2,7 +2,7 @@
   "name": "wch-vscode",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "winerealms",
   "packageManager": "pnpm@11.1.0",
   "license": "GPL-3.0-only",
@@ -173,7 +173,9 @@
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\"",
     "vscode:prepublish": "pnpm run clean && pnpm run compile",
-    "compile": "tsc -p ./",
+    "compile": "pnpm run typecheck && pnpm run bundle",
+    "typecheck": "tsc -p ./ --noEmit",
+    "bundle": "pnpm exec esbuild src/extension.ts src/debug/wchRiscvDebugAdapter.ts --bundle --platform=node --target=node20 --format=cjs --outdir=out --outbase=src --sourcemap --external:vscode",
     "watch": "tsc -watch -p ./",
     "package": "pnpm dlx @vscode/vsce package --no-dependencies",
     "publish": "pnpm dlx @vscode/vsce publish --no-dependencies",
@@ -187,6 +189,7 @@
     "@types/vscode": "^1.118.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.27.0",
     "eslint": "^9.39.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"

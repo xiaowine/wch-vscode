@@ -140,7 +140,7 @@ function buildOpenOcdProgramCommand(
   downloadTargetPath: string,
 ): string {
   const args = [`program "${toOpenOcdPath(downloadTargetPath)}"`];
-  const address = project.model.flash.address.trim();
+  const address = normalizeFlashAddress(project.model.flash.address);
   if (address) {
     args.push(address);
   }
@@ -150,6 +150,15 @@ function buildOpenOcdProgramCommand(
 
 export function toOpenOcdPath(filePath: string): string {
   return filePath.replace(/\\/g, "/");
+}
+
+export function normalizeFlashAddress(address: string): string {
+  const trimmed = address.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return /^0x08000000$/i.test(trimmed) ? "0x00000000" : trimmed;
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

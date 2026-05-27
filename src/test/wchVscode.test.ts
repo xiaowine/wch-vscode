@@ -13,7 +13,7 @@ import {
   resolveOpenOcdPaths,
   resolveToolchainDirectoryName,
 } from "../build/buildShared";
-import { toOpenOcdPath } from "../build/downloadProjectTask";
+import { normalizeFlashAddress, toOpenOcdPath } from "../build/downloadProjectTask";
 import { resolveProjectFileSystemPath, toLogicalProjectPath } from "../build/buildProjectResolver";
 import type { ResolvedBuildProject } from "../build/buildProjectResolver";
 import { buildOpenOcdServerArgs, resolveConfiguredOpenOcdExecutable } from "../debug/debugConfig";
@@ -57,6 +57,14 @@ suite("wch-vscode Test Suite", () => {
     assert.strictEqual(buildMarch(model), "rv32imac_zmmul");
   });
 
+  test("download normalizes mapped flash alias addresses for OpenOCD", () => {
+    assert.strictEqual(normalizeFlashAddress("0x08000000"), "0x00000000");
+    assert.strictEqual(normalizeFlashAddress("0x00000000"), "0x00000000");
+    assert.strictEqual(normalizeFlashAddress("  0x08000000  "), "0x00000000");
+    assert.strictEqual(normalizeFlashAddress("0x08004000"), "0x08004000");
+    assert.strictEqual(normalizeFlashAddress("main"), "main");
+  });
+
   test("wvproj setBreak=false disables debug stopAt", () => {
     const [model] = buildWchProjectModels(createParsedProject({
       runCommands: {
@@ -68,7 +76,7 @@ suite("wch-vscode Test Suite", () => {
     assert.strictEqual(model.debug.stopAt, "");
   });
 
-  test("wvproj setBreak=true enables configured debug stopAt", () => {
+  test("wvproj setBreakAt is ignored", () => {
     const [model] = buildWchProjectModels(createParsedProject({
       runCommands: {
         setBreak: true,
@@ -76,7 +84,7 @@ suite("wch-vscode Test Suite", () => {
       },
     }));
 
-    assert.strictEqual(model.debug.stopAt, "custom_boot_entry");
+    assert.strictEqual(model.debug.stopAt, "");
   });
 
   test("launch setStopAt does not affect debug stopAt", () => {
