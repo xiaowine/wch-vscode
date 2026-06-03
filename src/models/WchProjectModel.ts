@@ -91,6 +91,7 @@ export type WchLinkerSettings = {
 
 export type WchPostBuildSettings = {
 	createFlash: boolean;
+	createBinary: boolean;
 	flashArgs: string[];
 	createList: boolean;
 	listArgs: string[];

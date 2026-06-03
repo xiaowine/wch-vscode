@@ -264,6 +264,7 @@ function buildWchProjectModel(
   );
   const createFlashEnabled = getBoolean(createFlash?.enabled) ?? false;
   const flashOutputFormat = getString(createFlash?.outputFileFormat) ?? "";
+  const flashCreateBinary = flashOutputFormat.toLowerCase() === "ihexandbinary";
   const flashCopyOnlySectionText =
     getBoolean(createFlash?.copy_only_section_text) ?? false;
   const flashCopyOnlySectionData =
@@ -479,6 +480,7 @@ function buildWchProjectModel(
       },
       postBuild: {
         createFlash: createFlashEnabled,
+        createBinary: flashCreateBinary,
         flashArgs: buildFlashArgs(
           flashOutputFormat,
           flashCopyOnlySectionText,
@@ -1177,6 +1179,15 @@ function buildLinkMiscArgs(
   ]);
 }
 
+// MRS "hex and bin" 选项存储的值为 "ihexAndbinary"，标准 objcopy 不支持。
+// 将其映射为 ihex（与 MRS 自己生成的 makefile 行为一致）。
+const VALID_BFD_TARGETS = new Set(["ihex", "binary", "srec"]);
+
+function normalizeFlashOutputFormat(format: string): string {
+  const normalized = (format || "ihex").toLowerCase();
+  return VALID_BFD_TARGETS.has(normalized) ? normalized : "ihex";
+}
+
 function buildFlashArgs(
   outputFormat: string,
   copyOnlySectionText: boolean,
@@ -1184,10 +1195,10 @@ function buildFlashArgs(
   copyOnlySections: string[],
   flashFlags: string[],
 ): string[] {
-  const format = (outputFormat || "ihex").toLowerCase();
+  const format = normalizeFlashOutputFormat(outputFormat);
   return uniqueStrings([
     "-O",
-    format === "ihex" ? "ihex" : format,
+    format,
     ...(copyOnlySectionText ? ["-j", ".text"] : []),
     ...(copyOnlySectionData ? ["-j", ".data"] : []),
     ...copyOnlySections.flatMap((section) => ["-j", section]),

@@ -334,6 +334,7 @@ function createResolvedBuildProject(): ResolvedBuildProject {
     elfPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.elf`),
     hexPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.hex`),
     lstPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.lst`),
+    binPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.bin`),
     sizPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.siz`),
     mapFilePath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.map`),
     linkerScriptPath: path.join(model.identity.folderPath, "Ld", "Link.ld"),
@@ -543,6 +544,7 @@ function createModel(): WchProjectModel {
       },
       postBuild: {
         createFlash: true,
+        createBinary: true,
         flashArgs: ["-O", "ihex"],
         createList: true,
         listArgs: ["-x", "-S", "-C", "-l", "-w"],

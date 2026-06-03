@@ -55,6 +55,7 @@ function buildMakefile(
 	const allTargets = [
 		'$(ELF)',
 		project.model.build.postBuild.createFlash ? '$(HEX)' : '',
+		project.model.build.postBuild.createBinary ? '$(BIN)' : '',
 		project.model.build.postBuild.createList ? '$(LST)' : '',
 		project.model.build.postBuild.printSize ? 'size-report' : '',
 	].filter((value) => value.length > 0);
@@ -76,6 +77,7 @@ function buildMakefile(
 		`LD := ${project.hasCppSources ? '$(CXX)' : '$(CC)'}`,
 		`ELF := ${path.basename(project.elfPath)}`,
 		`HEX := ${path.basename(project.hexPath)}`,
+		`BIN := ${path.basename(project.binPath)}`,
 		`LST := ${path.basename(project.lstPath)}`,
 		`LDFLAGS := ${linkerFlags}`,
 		`LIBS := ${libraries}`,
@@ -119,6 +121,14 @@ function buildMakefile(
 				'$(HEX): $(ELF)',
 				'\t@echo Creating flash image: $@',
 				'\t"$(OBJCOPY)" $(FLASH_FLAGS) "$<" "$@"',
+				'',
+			].join('\n')
+			: '',
+		project.model.build.postBuild.createBinary
+			? [
+				'$(BIN): $(ELF)',
+				'\t@echo Creating binary image: $@',
+				'\t"$(OBJCOPY)" -O binary "$<" "$@"',
 				'',
 			].join('\n')
 			: '',
@@ -302,6 +312,7 @@ function buildCleanCommands(project: ResolvedBuildProject): string[] {
 		...project.sources.map((source) => source.subdirMakefilePath),
 		path.basename(project.elfPath),
 		project.model.build.postBuild.createFlash ? path.basename(project.hexPath) : '',
+		project.model.build.postBuild.createBinary ? path.basename(project.binPath) : '',
 		project.model.build.postBuild.createList ? path.basename(project.lstPath) : '',
 		project.mapFilePath ? path.basename(project.mapFilePath) : '',
 	]);

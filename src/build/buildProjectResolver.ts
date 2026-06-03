@@ -45,6 +45,7 @@ export type ResolvedBuildProject = {
 	targetBaseName: string;
 	elfPath: string;
 	hexPath: string;
+	binPath: string;
 	lstPath: string;
 	sizPath: string;
 	mapFilePath?: string;
@@ -60,6 +61,7 @@ export type BuildArtifactPaths = {
 	targetBaseName: string;
 	elfPath: string;
 	hexPath: string;
+	binPath: string;
 	lstPath: string;
 	sizPath: string;
 	mapFilePath?: string;
@@ -248,6 +250,7 @@ export function resolveBuildArtifactPaths(model: WchProjectModel): BuildArtifact
 		targetBaseName,
 		elfPath: path.join(outputDirectory, `${targetBaseName}.elf`),
 		hexPath: path.join(outputDirectory, `${targetBaseName}.hex`),
+		binPath: path.join(outputDirectory, `${targetBaseName}.bin`),
 		lstPath: path.join(outputDirectory, `${targetBaseName}.lst`),
 		sizPath: path.join(outputDirectory, `${targetBaseName}.siz`),
 		mapFilePath: resolveMapFilePath(model, outputDirectory, targetBaseName),
