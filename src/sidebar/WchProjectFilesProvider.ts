@@ -74,7 +74,7 @@ export class WchProjectFilesProvider
     const hasValidationErrors = result.validationErrors.length > 0;
     const item = new FileTreeItem(
       result.folder.name,
-      result.isTargetProject && !isUnsupported
+      hasValidationErrors || (result.isTargetProject && !isUnsupported)
         ? vscode.TreeItemCollapsibleState.Expanded
         : vscode.TreeItemCollapsibleState.None,
     );
@@ -98,6 +98,8 @@ export class WchProjectFilesProvider
         title: t("command.unsupportedProject"),
       };
       item.tooltip = project?.unsupportedReason ?? result.folder.uri.fsPath;
+    } else if (hasValidationErrors) {
+      item.children = this.buildValidationErrorItems(result);
     } else if (result.isTargetProject) {
       item.loadChildren = async () =>
         this.loadWorkspaceProjectItems(result.folder.uri.fsPath, models);
@@ -111,7 +113,29 @@ export class WchProjectFilesProvider
       result.folder.uri.fsPath,
       t("sidebar.projectFileErrors"),
       ...result.validationErrors.map((error) => `${error.fileName}: ${error.message}`),
+      t("sidebar.projectFileFixSuggestion"),
     ].join("\n");
+  }
+
+  private buildValidationErrorItems(result: ProjectDetectionResult): FileTreeItem[] {
+    const errorItems = result.validationErrors.map((error) => {
+      const item = new FileTreeItem(error.fileName);
+      item.description = error.message;
+      item.tooltip = `${error.filePath}\n${error.message}`;
+      item.iconPath = new vscode.ThemeIcon("error");
+      item.command = {
+        command: "vscode.open",
+        title: t("command.openFile"),
+        arguments: [vscode.Uri.file(error.filePath)],
+      };
+      return item;
+    });
+
+    const suggestion = new FileTreeItem(t("sidebar.projectFileFixSuggestion"));
+    suggestion.tooltip = t("sidebar.projectFileFixSuggestion");
+    suggestion.iconPath = new vscode.ThemeIcon("lightbulb");
+
+    return [...errorItems, suggestion];
   }
 
   // 工作区未打开时给出统一提示，避免资源管理器视图看起来像加载失败。

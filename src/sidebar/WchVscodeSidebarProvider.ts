@@ -90,19 +90,22 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
       : result.isTargetProject
       ? "matchedProject"
       : "unmatchedProject";
-    item.collapsibleState = result.isTargetProject
+    item.collapsibleState = hasValidationErrors || result.isTargetProject
       ? vscode.TreeItemCollapsibleState.Expanded
       : vscode.TreeItemCollapsibleState.None;
-    item.children = result.isTargetProject
-      ? isUnsupported
-        ? this.buildUnsupportedProjectItems(project)
-        : [
+    item.children = [
+      ...(hasValidationErrors ? this.buildValidationErrorItems(result) : []),
+      ...(result.isTargetProject
+        ? isUnsupported
+          ? this.buildUnsupportedProjectItems(project)
+          : [
           this.createMounRiverStudioPathSettingItem(),
           this.createGenerateCppToolsItem(result.folder, models),
           ...models.map((model) => this.createOpenInMounRiverStudioItem(model)),
           ...models.flatMap((model) => this.buildProjectModelItems(model)),
         ]
-      : [];
+        : []),
+    ];
 
     return item;
   }
@@ -150,6 +153,33 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
     item.tooltip = message;
     item.iconPath = new vscode.ThemeIcon("error");
     return item;
+  }
+
+  private buildValidationErrorItems(result: ProjectDetectionResult): SidebarItem[] {
+    const errors = result.validationErrors.map((error) => {
+      const item = new SidebarItem(error.fileName);
+      item.description = error.message;
+      item.tooltip = `${error.filePath}\n${error.message}`;
+      item.iconPath = new vscode.ThemeIcon("error");
+      item.command = {
+        command: "vscode.open",
+        title: t("command.openFile"),
+        arguments: [vscode.Uri.file(error.filePath)],
+      };
+      return item;
+    });
+
+    const suggestion = new SidebarItem(t("sidebar.projectFileFixSuggestion"));
+    suggestion.tooltip = t("sidebar.projectFileFixSuggestion");
+    suggestion.iconPath = new vscode.ThemeIcon("lightbulb");
+
+    const section = new SidebarItem(
+      t("sidebar.projectFileErrors"),
+      vscode.TreeItemCollapsibleState.Expanded,
+    );
+    section.iconPath = new vscode.ThemeIcon("error");
+    section.children = [...errors, suggestion];
+    return [section];
   }
 
   // 将精简后的项目模型转换成侧栏树节点。
@@ -334,6 +364,7 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
     if (result.validationErrors.length > 0) {
       lines.push(t("sidebar.projectFileErrors"));
       lines.push(...result.validationErrors.map((error) => `${error.fileName}: ${error.message}`));
+      lines.push(t("sidebar.projectFileFixSuggestion"));
     }
 
     return lines.join("\n");

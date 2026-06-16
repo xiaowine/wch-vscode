@@ -70,7 +70,7 @@ export async function parseWvprojFile(file: vscode.Uri): Promise<ParsedProjectFi
 			throw new Error(t('error.projectFileEmpty'));
 		}
 
-		const data = JSON.parse(content);
+		const data = parseJsonProjectContent(content);
 		if (!isValidWvprojData(data)) {
 			throw new Error(t('error.projectFileInvalidData'));
 		}
@@ -113,7 +113,7 @@ async function parseXmlFile(file: vscode.Uri, format: 'cproject-xml' | 'launch-x
 
 		const validationResult = XMLValidator.validate(xmlContent);
 		if (validationResult !== true) {
-			throw new Error(validationResult.err.msg);
+			throw new Error(t('error.projectFileFormatInvalid'));
 		}
 
 		const data = xmlParser.parse(xmlContent, true);
@@ -154,6 +154,14 @@ function createParseErrorResult(
 		data: null,
 		parseError: error instanceof Error ? error.message : String(error),
 	};
+}
+
+function parseJsonProjectContent(content: string): unknown {
+	try {
+		return JSON.parse(content);
+	} catch {
+		throw new Error(t('error.projectFileFormatInvalid'));
+	}
 }
 
 function isParsedObject(data: unknown): data is Record<string, unknown> {
