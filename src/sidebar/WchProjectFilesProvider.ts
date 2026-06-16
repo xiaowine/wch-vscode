@@ -71,6 +71,7 @@ export class WchProjectFilesProvider
   ): FileTreeItem {
     const models = project?.models ?? [];
     const isUnsupported = Boolean(project?.unsupportedReason);
+    const hasValidationErrors = result.validationErrors.length > 0;
     const item = new FileTreeItem(
       result.folder.name,
       result.isTargetProject && !isUnsupported
@@ -79,12 +80,16 @@ export class WchProjectFilesProvider
     );
     item.description = isUnsupported
       ? t("sidebar.unsupportedProject")
+      : hasValidationErrors
+      ? t("sidebar.invalidProject")
       : result.isTargetProject
       ? t("sidebar.projectCount", { count: models.length })
       : t("sidebar.notMatched");
-    item.tooltip = result.folder.uri.fsPath;
+    item.tooltip = hasValidationErrors
+      ? this.buildValidationTooltip(result)
+      : result.folder.uri.fsPath;
     item.iconPath = new vscode.ThemeIcon(
-      isUnsupported ? "error" : result.isTargetProject ? "root-folder-opened" : "warning",
+      isUnsupported || hasValidationErrors ? "error" : result.isTargetProject ? "root-folder-opened" : "warning",
     );
 
     if (isUnsupported) {
@@ -99,6 +104,14 @@ export class WchProjectFilesProvider
     }
 
     return item;
+  }
+
+  private buildValidationTooltip(result: ProjectDetectionResult): string {
+    return [
+      result.folder.uri.fsPath,
+      t("sidebar.projectFileErrors"),
+      ...result.validationErrors.map((error) => `${error.fileName}: ${error.message}`),
+    ].join("\n");
   }
 
   // 工作区未打开时给出统一提示，避免资源管理器视图看起来像加载失败。

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { XMLParser } from 'fast-xml-parser';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { buildWchProjectModels, getUnsupportedProjectReason } from './projectModelBuilder';
 import type { ParsedProjectPair, ParsedProjectFile, ParsedWchProject } from './projectState';
 import { t } from './i18n';
@@ -20,7 +20,7 @@ export async function parseMatchedProjectFiles(
 	matchingBaseNames: string[],
 	unconfiguredWvprojFiles: vscode.Uri[],
 ): Promise<ParsedWchProject> {
-	const cprojectResults = await Promise.all(cprojectFiles.map((file) => parseXmlFile(file)));
+	const cprojectResults = await Promise.all(cprojectFiles.map((file) => parseCprojectFile(file)));
 	const launchMap = await createLaunchFileMap(launchFiles);
 	const wvprojMap = await createWvprojFileMap(wvprojFiles);
 	const projectPairs: ParsedProjectPair[] = [];
@@ -57,6 +57,35 @@ export async function parseMatchedProjectFiles(
 	return project;
 }
 
+// 读取并解析 .cproject XML 文件。
+export async function parseCprojectFile(file: vscode.Uri): Promise<ParsedProjectFile> {
+	return parseXmlFile(file, 'cproject-xml');
+}
+
+// 读取并解析 .wvproj JSON 文件。
+export async function parseWvprojFile(file: vscode.Uri): Promise<ParsedProjectFile> {
+	try {
+		const content = await readTextFile(file);
+		if (content.trim().length === 0) {
+			throw new Error(t('error.projectFileEmpty'));
+		}
+
+		const data = JSON.parse(content);
+		if (!isValidWvprojData(data)) {
+			throw new Error(t('error.projectFileInvalidData'));
+		}
+
+		return {
+			filePath: file.fsPath,
+			fileName: getFileName(file),
+			format: 'wvproj-json',
+			data,
+		};
+	} catch (error) {
+		return createParseErrorResult(file, 'wvproj-json', error);
+	}
+}
+
 // 将 .launch 文件解析后按去后缀基名建立索引。
 async function createLaunchFileMap(files: vscode.Uri[]): Promise<Map<string, ParsedProjectFile>> {
 	const entries = await Promise.all(
@@ -75,73 +104,86 @@ async function createWvprojFileMap(files: vscode.Uri[]): Promise<Map<string, Par
 	return new Map(entries);
 }
 
-// 读取并解析 .cproject XML 文件。
-async function parseXmlFile(file: vscode.Uri): Promise<ParsedProjectFile> {
-	const content = await vscode.workspace.fs.readFile(file);
-	const xmlContent = textDecoder.decode(content);
-
+async function parseXmlFile(file: vscode.Uri, format: 'cproject-xml' | 'launch-xml'): Promise<ParsedProjectFile> {
 	try {
+		const xmlContent = await readTextFile(file);
+		if (xmlContent.trim().length === 0) {
+			throw new Error(t('error.projectFileEmpty'));
+		}
+
+		const validationResult = XMLValidator.validate(xmlContent);
+		if (validationResult !== true) {
+			throw new Error(validationResult.err.msg);
+		}
+
+		const data = xmlParser.parse(xmlContent, true);
+		if (!isValidXmlProjectData(data, format)) {
+			throw new Error(t('error.projectFileInvalidData'));
+		}
+
 		return {
 			filePath: file.fsPath,
 			fileName: getFileName(file),
-			format: 'cproject-xml',
-			data: xmlParser.parse(xmlContent, true),
+			format,
+			data,
 		};
 	} catch (error) {
-		return {
-			filePath: file.fsPath,
-			fileName: getFileName(file),
-			format: 'cproject-xml',
-			data: null,
-			parseError: error instanceof Error ? error.message : String(error),
-		};
+		return createParseErrorResult(file, format, error);
 	}
 }
 
 // 读取并解析 .launch XML 文件。
 async function parseLaunchFile(file: vscode.Uri): Promise<ParsedProjectFile> {
-	const content = await vscode.workspace.fs.readFile(file);
-	const xmlContent = textDecoder.decode(content);
-
-	try {
-		return {
-			filePath: file.fsPath,
-			fileName: getFileName(file),
-			format: 'launch-xml',
-			data: xmlParser.parse(xmlContent, true),
-		};
-	} catch (error) {
-		return {
-			filePath: file.fsPath,
-			fileName: getFileName(file),
-			format: 'launch-xml',
-			data: null,
-			parseError: error instanceof Error ? error.message : String(error),
-		};
-	}
+	return parseXmlFile(file, 'launch-xml');
 }
 
-// 读取并解析 .wvproj JSON 文件。
-async function parseWvprojFile(file: vscode.Uri): Promise<ParsedProjectFile> {
+async function readTextFile(file: vscode.Uri): Promise<string> {
 	const content = await vscode.workspace.fs.readFile(file);
-	const jsonContent = textDecoder.decode(content);
+	return textDecoder.decode(content);
+}
 
-	try {
-		return {
-			filePath: file.fsPath,
-			fileName: getFileName(file),
-			format: 'wvproj-json',
-			data: JSON.parse(jsonContent),
-		};
-	} catch (error) {
-		return {
-			filePath: file.fsPath,
-			fileName: getFileName(file),
-			format: 'wvproj-json',
-			data: null,
-			parseError: error instanceof Error ? error.message : String(error),
-		};
+function createParseErrorResult(
+	file: vscode.Uri,
+	format: ParsedProjectFile['format'],
+	error: unknown,
+): ParsedProjectFile {
+	return {
+		filePath: file.fsPath,
+		fileName: getFileName(file),
+		format,
+		data: null,
+		parseError: error instanceof Error ? error.message : String(error),
+	};
+}
+
+function isParsedObject(data: unknown): data is Record<string, unknown> {
+	return typeof data === 'object' && data !== null && !Array.isArray(data);
+}
+
+function isValidXmlProjectData(data: unknown, format: 'cproject-xml' | 'launch-xml'): data is Record<string, unknown> {
+	if (!isParsedObject(data)) {
+		return false;
 	}
+
+	if (format === 'cproject-xml') {
+		return isParsedObject(data.cproject);
+	}
+
+	return isParsedObject(data.launchConfiguration);
+}
+
+function isValidWvprojData(data: unknown): data is Record<string, unknown> {
+	if (!isParsedObject(data)) {
+		return false;
+	}
+
+	const basic = data.basic;
+	const buildConfig = data.buildConfig;
+	if (!isParsedObject(basic) || !isParsedObject(buildConfig)) {
+		return false;
+	}
+
+	return Array.isArray(buildConfig.configurations) && buildConfig.configurations.length > 0;
 }
 
 // 取文件名，用于展示和调试。

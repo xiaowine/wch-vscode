@@ -70,18 +70,23 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
   ): SidebarItem {
     const models = project?.models ?? [];
     const isUnsupported = Boolean(project?.unsupportedReason);
+    const hasValidationErrors = result.validationErrors.length > 0;
     const item = new SidebarItem(result.folder.name);
     item.description = isUnsupported
       ? t("sidebar.unsupportedProject")
+      : hasValidationErrors
+      ? t("sidebar.invalidProject")
       : result.isTargetProject
       ? t("sidebar.matchedProject")
       : t("sidebar.notMatched");
     item.tooltip = this.buildTooltip(result);
     item.iconPath = new vscode.ThemeIcon(
-      isUnsupported ? "error" : result.isTargetProject ? "pass-filled" : "warning",
+      isUnsupported || hasValidationErrors ? "error" : result.isTargetProject ? "pass-filled" : "warning",
     );
     item.contextValue = isUnsupported
       ? "unsupportedProject"
+      : hasValidationErrors
+      ? "invalidProject"
       : result.isTargetProject
       ? "matchedProject"
       : "unmatchedProject";
@@ -324,6 +329,11 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
       lines.push(`${t("sidebar.matchedBaseNames")}: ${result.matchingBaseNames.join(", ")}`);
     } else {
       lines.push(t("sidebar.matchedBaseNamesNone"));
+    }
+
+    if (result.validationErrors.length > 0) {
+      lines.push(t("sidebar.projectFileErrors"));
+      lines.push(...result.validationErrors.map((error) => `${error.fileName}: ${error.message}`));
     }
 
     return lines.join("\n");

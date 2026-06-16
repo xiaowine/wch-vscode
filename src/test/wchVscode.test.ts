@@ -1,4 +1,6 @@
 import * as assert from "assert";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 
 import * as vscode from "vscode";
@@ -18,10 +20,84 @@ import { resolveProjectFileSystemPath, toLogicalProjectPath } from "../build/bui
 import type { ResolvedBuildProject } from "../build/buildProjectResolver";
 import { buildOpenOcdServerArgs, resolveConfiguredOpenOcdExecutable } from "../debug/debugConfig";
 import { getList, getString, getTuple, parseMiLine } from "../debug/miParser";
+import { refreshWchProjectState } from "../projectDetection";
 import { buildWchProjectModels } from "../projectModelBuilder";
-import type { ParsedWchProject } from "../projectState";
+import { getWchProjectState, type ParsedWchProject } from "../projectState";
 suite("wch-vscode Test Suite", () => {
   vscode.window.showInformationMessage("Start wch-vscode tests.");
+
+  test("project detection rejects empty required files and reports errors", async () => {
+    const folderPath = await fs.mkdtemp(path.join(os.tmpdir(), "wch-vscode-invalid-"));
+    const folderIndex = vscode.workspace.workspaceFolders?.length ?? 0;
+
+    try {
+      await fs.writeFile(path.join(folderPath, ".cproject"), "");
+      await fs.writeFile(path.join(folderPath, "DemoProject.wvproj"), "");
+
+      const added = vscode.workspace.updateWorkspaceFolders(
+        folderIndex,
+        0,
+        {
+          uri: vscode.Uri.file(folderPath),
+          name: "InvalidProject",
+        },
+      );
+      assert.strictEqual(added, true);
+
+      try {
+        await refreshWchProjectState();
+        const state = getWchProjectState();
+        const result = state.results.find((item) => item.folder.uri.fsPath === folderPath);
+
+        assert.ok(result);
+        assert.strictEqual(result.isTargetProject, false);
+        assert.strictEqual(state.projects.some((project) => project.folderPath === folderPath), false);
+        assert.strictEqual(result.validationErrors.length, 2);
+        assert.ok(result.validationErrors.some((error) => error.fileName === ".cproject"));
+        assert.ok(result.validationErrors.some((error) => error.fileName === "DemoProject.wvproj"));
+      } finally {
+        vscode.workspace.updateWorkspaceFolders(folderIndex, 1);
+      }
+    } finally {
+      await fs.rm(folderPath, { recursive: true, force: true });
+    }
+  });
+
+  test("project detection rejects structurally invalid required files", async () => {
+    const folderPath = await fs.mkdtemp(path.join(os.tmpdir(), "wch-vscode-invalid-structure-"));
+    const folderIndex = vscode.workspace.workspaceFolders?.length ?? 0;
+
+    try {
+      await fs.writeFile(path.join(folderPath, ".cproject"), "<notCProject />");
+      await fs.writeFile(path.join(folderPath, "DemoProject.wvproj"), "{}");
+
+      const added = vscode.workspace.updateWorkspaceFolders(
+        folderIndex,
+        0,
+        {
+          uri: vscode.Uri.file(folderPath),
+          name: "InvalidProjectStructure",
+        },
+      );
+      assert.strictEqual(added, true);
+
+      try {
+        await refreshWchProjectState();
+        const state = getWchProjectState();
+        const result = state.results.find((item) => item.folder.uri.fsPath === folderPath);
+
+        assert.ok(result);
+        assert.strictEqual(result.isTargetProject, false);
+        assert.strictEqual(state.projects.some((project) => project.folderPath === folderPath), false);
+        assert.strictEqual(result.validationErrors.length, 2);
+        assert.ok(result.validationErrors.every((error) => error.message.length > 0));
+      } finally {
+        vscode.workspace.updateWorkspaceFolders(folderIndex, 1);
+      }
+    } finally {
+      await fs.rm(folderPath, { recursive: true, force: true });
+    }
+  });
 
   test("resolveToolchainDirectoryName maps supported WCH toolchains", () => {
     assert.strictEqual(

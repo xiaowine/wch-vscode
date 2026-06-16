@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { setWchProjectState } from './projectState';
-import { parseMatchedProjectFiles } from './xmlParser';
+import type { ParsedProjectFile } from './projectState';
+import { parseCprojectFile, parseMatchedProjectFiles, parseWvprojFile } from './xmlParser';
 
 // 统一约束可刷新的树视图提供器，便于一次刷新多个视图。
 type RefreshableTreeProvider = {
@@ -8,6 +9,12 @@ type RefreshableTreeProvider = {
 };
 
 // 缓存每个工作区文件夹的项目检测结果，供侧栏直接读取。
+export type ProjectDetectionValidationError = {
+	filePath: string;
+	fileName: string;
+	message: string;
+};
+
 export type ProjectDetectionResult = {
 	folder: vscode.WorkspaceFolder;
 	cprojectCount: number;
@@ -18,6 +25,7 @@ export type ProjectDetectionResult = {
 	wvprojFiles: vscode.Uri[];
 	matchingBaseNames: string[];
 	unconfiguredWvprojFiles: vscode.Uri[];
+	validationErrors: ProjectDetectionValidationError[];
 	isTargetProject: boolean;
 };
 
@@ -97,17 +105,25 @@ async function detectProjectInFolder(folder: vscode.WorkspaceFolder): Promise<Pr
 		new vscode.RelativePattern(folder, '**/*.wvproj'),
 		'**/node_modules/**',
 	);
+	const cprojectResults = await Promise.all(cprojectFiles.map((file) => parseCprojectFile(file)));
+	const wvprojResults = await Promise.all(wvprojFiles.map((file) => parseWvprojFile(file)));
+	const validCprojectFiles = filterValidFiles(cprojectFiles, cprojectResults);
+	const validWvprojFiles = filterValidFiles(wvprojFiles, wvprojResults);
+	const validationErrors = [
+		...collectValidationErrors(cprojectResults),
+		...collectValidationErrors(wvprojResults),
+	];
 
 	const launchBaseNames = new Set(launchFiles.map((file) => getBaseName(file, '.launch')));
-	const wvprojBaseNames = new Set(wvprojFiles.map((file) => getBaseName(file, '.wvproj')));
+	const wvprojBaseNames = new Set(validWvprojFiles.map((file) => getBaseName(file, '.wvproj')));
 	const matchingBaseNames = Array.from(
 		new Set(
-			wvprojFiles
+			validWvprojFiles
 				.map((file) => getBaseName(file, '.wvproj'))
 				.filter((name) => launchBaseNames.has(name)),
 		),
 	).sort();
-	const unconfiguredWvprojFiles = wvprojFiles
+	const unconfiguredWvprojFiles = validWvprojFiles
 		.filter((file) => !launchBaseNames.has(getBaseName(file, '.wvproj')))
 		.sort((left, right) => left.fsPath.localeCompare(right.fsPath, 'en'));
 
@@ -116,13 +132,33 @@ async function detectProjectInFolder(folder: vscode.WorkspaceFolder): Promise<Pr
 		cprojectCount: cprojectFiles.length,
 		launchCount: launchFiles.length,
 		wvprojCount: wvprojFiles.length,
-		cprojectFiles,
+		cprojectFiles: validCprojectFiles,
 		launchFiles,
-		wvprojFiles,
+		wvprojFiles: validWvprojFiles,
 		matchingBaseNames,
 		unconfiguredWvprojFiles,
-		isTargetProject: cprojectFiles.length > 0 && wvprojBaseNames.size > 0,
+		validationErrors,
+		isTargetProject: validCprojectFiles.length > 0 && wvprojBaseNames.size > 0,
 	};
+}
+
+function filterValidFiles(files: vscode.Uri[], results: ParsedProjectFile[]): vscode.Uri[] {
+	const validPaths = new Set(
+		results
+			.filter((result) => !result.parseError)
+			.map((result) => result.filePath),
+	);
+	return files.filter((file) => validPaths.has(file.fsPath));
+}
+
+function collectValidationErrors(results: ParsedProjectFile[]): ProjectDetectionValidationError[] {
+	return results
+		.filter((result) => result.parseError)
+		.map((result) => ({
+			filePath: result.filePath,
+			fileName: result.fileName,
+			message: result.parseError ?? '',
+		}));
 }
 
 // 取文件去掉指定后缀后的基名，用于匹配 .launch 和 .wvproj。
