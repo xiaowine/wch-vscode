@@ -15,10 +15,19 @@ import {
   resolveOpenOcdPaths,
   resolveToolchainDirectoryName,
 } from "../build/buildShared";
-import { normalizeFlashAddress, toOpenOcdPath } from "../build/downloadProjectTask";
-import { resolveProjectFileSystemPath, toLogicalProjectPath } from "../build/buildProjectResolver";
+import {
+  normalizeFlashAddress,
+  toOpenOcdPath,
+} from "../build/downloadProjectTask";
+import {
+  resolveProjectFileSystemPath,
+  toLogicalProjectPath,
+} from "../build/buildProjectResolver";
 import type { ResolvedBuildProject } from "../build/buildProjectResolver";
-import { buildOpenOcdServerArgs, resolveConfiguredOpenOcdExecutable } from "../debug/debugConfig";
+import {
+  buildOpenOcdServerArgs,
+  resolveConfiguredOpenOcdExecutable,
+} from "../debug/debugConfig";
 import { getList, getString, getTuple, parseMiLine } from "../debug/miParser";
 import { refreshWchProjectState } from "../projectDetection";
 import { buildWchProjectModels } from "../projectModelBuilder";
@@ -27,34 +36,45 @@ suite("wch-vscode Test Suite", () => {
   vscode.window.showInformationMessage("Start wch-vscode tests.");
 
   test("project detection rejects empty required files and reports errors", async () => {
-    const folderPath = await fs.mkdtemp(path.join(os.tmpdir(), "wch-vscode-invalid-"));
+    const folderPath = await fs.mkdtemp(
+      path.join(os.tmpdir(), "wch-vscode-invalid-"),
+    );
     const folderIndex = vscode.workspace.workspaceFolders?.length ?? 0;
 
     try {
       await fs.writeFile(path.join(folderPath, ".cproject"), "");
       await fs.writeFile(path.join(folderPath, "DemoProject.wvproj"), "");
 
-      const added = vscode.workspace.updateWorkspaceFolders(
-        folderIndex,
-        0,
-        {
-          uri: vscode.Uri.file(folderPath),
-          name: "InvalidProject",
-        },
-      );
+      const added = vscode.workspace.updateWorkspaceFolders(folderIndex, 0, {
+        uri: vscode.Uri.file(folderPath),
+        name: "InvalidProject",
+      });
       assert.strictEqual(added, true);
 
       try {
         await refreshWchProjectState();
         const state = getWchProjectState();
-        const result = state.results.find((item) => item.folder.uri.fsPath === folderPath);
+        const result = state.results.find(
+          (item) => item.folder.uri.fsPath === folderPath,
+        );
 
         assert.ok(result);
         assert.strictEqual(result.isTargetProject, false);
-        assert.strictEqual(state.projects.some((project) => project.folderPath === folderPath), false);
+        assert.strictEqual(
+          state.projects.some((project) => project.folderPath === folderPath),
+          false,
+        );
         assert.strictEqual(result.validationErrors.length, 2);
-        assert.ok(result.validationErrors.some((error) => error.fileName === ".cproject"));
-        assert.ok(result.validationErrors.some((error) => error.fileName === "DemoProject.wvproj"));
+        assert.ok(
+          result.validationErrors.some(
+            (error) => error.fileName === ".cproject",
+          ),
+        );
+        assert.ok(
+          result.validationErrors.some(
+            (error) => error.fileName === "DemoProject.wvproj",
+          ),
+        );
       } finally {
         vscode.workspace.updateWorkspaceFolders(folderIndex, 1);
       }
@@ -64,33 +84,38 @@ suite("wch-vscode Test Suite", () => {
   });
 
   test("project detection rejects structurally invalid required files", async () => {
-    const folderPath = await fs.mkdtemp(path.join(os.tmpdir(), "wch-vscode-invalid-structure-"));
+    const folderPath = await fs.mkdtemp(
+      path.join(os.tmpdir(), "wch-vscode-invalid-structure-"),
+    );
     const folderIndex = vscode.workspace.workspaceFolders?.length ?? 0;
 
     try {
       await fs.writeFile(path.join(folderPath, ".cproject"), "<notCProject />");
       await fs.writeFile(path.join(folderPath, "DemoProject.wvproj"), "{}");
 
-      const added = vscode.workspace.updateWorkspaceFolders(
-        folderIndex,
-        0,
-        {
-          uri: vscode.Uri.file(folderPath),
-          name: "InvalidProjectStructure",
-        },
-      );
+      const added = vscode.workspace.updateWorkspaceFolders(folderIndex, 0, {
+        uri: vscode.Uri.file(folderPath),
+        name: "InvalidProjectStructure",
+      });
       assert.strictEqual(added, true);
 
       try {
         await refreshWchProjectState();
         const state = getWchProjectState();
-        const result = state.results.find((item) => item.folder.uri.fsPath === folderPath);
+        const result = state.results.find(
+          (item) => item.folder.uri.fsPath === folderPath,
+        );
 
         assert.ok(result);
         assert.strictEqual(result.isTargetProject, false);
-        assert.strictEqual(state.projects.some((project) => project.folderPath === folderPath), false);
+        assert.strictEqual(
+          state.projects.some((project) => project.folderPath === folderPath),
+          false,
+        );
         assert.strictEqual(result.validationErrors.length, 2);
-        assert.ok(result.validationErrors.every((error) => error.message.length > 0));
+        assert.ok(
+          result.validationErrors.every((error) => error.message.length > 0),
+        );
       } finally {
         vscode.workspace.updateWorkspaceFolders(folderIndex, 1);
       }
@@ -101,25 +126,39 @@ suite("wch-vscode Test Suite", () => {
 
   test("resolveToolchainDirectoryName maps supported WCH toolchains", () => {
     assert.strictEqual(
-      resolveToolchainDirectoryName("${WCH:Toolchain:GCC8}/bin/riscv-none-embed-gdb.exe"),
+      resolveToolchainDirectoryName(
+        "${WCH:Toolchain:GCC8}/bin/riscv-none-embed-gdb.exe",
+      ),
       "RISC-V Embedded GCC",
     );
     assert.strictEqual(
-      resolveToolchainDirectoryName("${WCH:Toolchain:GCC12}/bin/riscv-none-embed-gdb.exe"),
+      resolveToolchainDirectoryName(
+        "${WCH:Toolchain:GCC12}/bin/riscv-none-embed-gdb.exe",
+      ),
       "RISC-V Embedded GCC12",
     );
     assert.strictEqual(
-      resolveToolchainDirectoryName("${WCH:Toolchain:GCC15}/bin/riscv-none-embed-gdb.exe"),
+      resolveToolchainDirectoryName(
+        "${WCH:Toolchain:GCC15}/bin/riscv-none-embed-gdb.exe",
+      ),
       "RISC-V Embedded GCC15",
     );
   });
 
   test("build resolver maps linked folder project paths", () => {
     const model = createModel();
-    const sourcePath = resolveProjectFileSystemPath(model, "${project}/Core/startup/startup_ch32v00x.S");
+    const sourcePath = resolveProjectFileSystemPath(
+      model,
+      "${project}/Core/startup/startup_ch32v00x.S",
+    );
     assert.strictEqual(
       sourcePath,
-      path.resolve(model.identity.folderPath, "..\\shared\\Core", "startup", "startup_ch32v00x.S"),
+      path.resolve(
+        model.identity.folderPath,
+        "..\\shared\\Core",
+        "startup",
+        "startup_ch32v00x.S",
+      ),
     );
     assert.strictEqual(
       toLogicalProjectPath(model, sourcePath),
@@ -133,6 +172,24 @@ suite("wch-vscode Test Suite", () => {
     assert.strictEqual(buildMarch(model), "rv32imac_zmmul");
   });
 
+  test("buildMarch expands B extension to Z sub-extensions", () => {
+    const model = createModel();
+    model.build.riscvExtensions = ["M", "C", "B"];
+    assert.strictEqual(buildMarch(model), "rv32imc_zba_zbb_zbc_zbs");
+  });
+
+  test("buildMarch appends XW directly when no Z-extensions", () => {
+    const model = createModel();
+    model.build.riscvExtensions = ["M", "C", "XW"];
+    assert.strictEqual(buildMarch(model), "rv32imcxw");
+  });
+
+  test("buildMarch places XW after Z sub-extensions with underscore", () => {
+    const model = createModel();
+    model.build.riscvExtensions = ["M", "C", "XW", "B"];
+    assert.strictEqual(buildMarch(model), "rv32imc_zba_zbb_zbc_zbs_xw");
+  });
+
   test("download normalizes mapped flash alias addresses for OpenOCD", () => {
     assert.strictEqual(normalizeFlashAddress("0x08000000"), "0x00000000");
     assert.strictEqual(normalizeFlashAddress("0x00000000"), "0x00000000");
@@ -142,66 +199,100 @@ suite("wch-vscode Test Suite", () => {
   });
 
   test("wvproj setBreak=false disables debug stopAt", () => {
-    const [model] = buildWchProjectModels(createParsedProject({
-      runCommands: {
-        setBreak: false,
-        setBreakAt: "handle_reset",
-      },
-    }));
+    const [model] = buildWchProjectModels(
+      createParsedProject({
+        runCommands: {
+          setBreak: false,
+          setBreakAt: "handle_reset",
+        },
+      }),
+    );
 
     assert.strictEqual(model.debug.stopAt, "");
   });
 
   test("wvproj setBreakAt is ignored", () => {
-    const [model] = buildWchProjectModels(createParsedProject({
-      runCommands: {
-        setBreak: true,
-        setBreakAt: "custom_boot_entry",
-      },
-    }));
+    const [model] = buildWchProjectModels(
+      createParsedProject({
+        runCommands: {
+          setBreak: true,
+          setBreakAt: "custom_boot_entry",
+        },
+      }),
+    );
 
     assert.strictEqual(model.debug.stopAt, "");
   });
 
+  test("linker raw long options are normalized for gcc forwarding", () => {
+    const [model] = buildWchProjectModels(
+      createParsedProject({
+        linkerMisc: {
+          linker_flags: ["--print-memory-usage"],
+        },
+      }),
+    );
+
+    assert.ok(model.build.linker.args.includes("-Wl,--print-memory-usage"));
+    assert.strictEqual(
+      model.build.linker.args.includes("--print-memory-usage"),
+      false,
+    );
+  });
+
   test("launch setStopAt does not affect debug stopAt", () => {
-    const [model] = buildWchProjectModels(createParsedProject({
-      launchBooleans: {
-        "org.eclipse.cdt.debug.gdbjtag.core.setStopAt": true,
-      },
-      launchStrings: {
-        "org.eclipse.cdt.debug.gdbjtag.core.stopAt": "handle_reset",
-      },
-    }));
+    const [model] = buildWchProjectModels(
+      createParsedProject({
+        launchBooleans: {
+          "org.eclipse.cdt.debug.gdbjtag.core.setStopAt": true,
+        },
+        launchStrings: {
+          "org.eclipse.cdt.debug.gdbjtag.core.stopAt": "handle_reset",
+        },
+      }),
+    );
 
     assert.strictEqual(model.debug.stopAt, "");
   });
 
   test("compiler executable follows model build prefix", () => {
     assert.strictEqual(
-      resolveCompilerExecutableName("${WCH:Toolchain:GCC8}/bin/riscv-none-embed-gdb.exe"),
+      resolveCompilerExecutableName(
+        "${WCH:Toolchain:GCC8}/bin/riscv-none-embed-gdb.exe",
+      ),
       "riscv-none-embed-gcc.exe",
     );
     assert.strictEqual(
-      resolveCompilerExecutableName("${WCH:Toolchain:GCC12}/bin/riscv-none-embed-gdb.exe"),
+      resolveCompilerExecutableName(
+        "${WCH:Toolchain:GCC12}/bin/riscv-none-embed-gdb.exe",
+      ),
       "riscv-wch-elf-gcc.exe",
     );
     assert.strictEqual(
-      resolveCompilerExecutableName("${WCH:Toolchain:GCC15}/bin/riscv-none-embed-gdb.exe"),
+      resolveCompilerExecutableName(
+        "${WCH:Toolchain:GCC15}/bin/riscv-none-embed-gdb.exe",
+      ),
       "riscv32-wch-elf-gcc.exe",
     );
   });
 
   test("gdb executable follows model build prefix", () => {
     assert.strictEqual(
-      resolveGdbExecutableName("${WCH:Toolchain:GCC8}/bin/riscv-none-embed-gdb.exe"),
+      resolveGdbExecutableName(
+        "${WCH:Toolchain:GCC8}/bin/riscv-none-embed-gdb.exe",
+      ),
       "riscv-none-embed-gdb.exe",
     );
     assert.strictEqual(
-      resolveGdbExecutableName("${WCH:Toolchain:GCC12}/bin/riscv-none-embed-gdb.exe"),
+      resolveGdbExecutableName(
+        "${WCH:Toolchain:GCC12}/bin/riscv-none-embed-gdb.exe",
+      ),
       "riscv-wch-elf-gdb.exe",
     );
     assert.strictEqual(
-      resolveGdbExecutableName("${WCH:Toolchain:GCC15}/bin/riscv-none-embed-gdb.exe"),
+      resolveGdbExecutableName(
+        "${WCH:Toolchain:GCC15}/bin/riscv-none-embed-gdb.exe",
+      ),
       "riscv32-wch-elf-gdb.exe",
     );
   });
@@ -232,80 +323,97 @@ suite("wch-vscode Test Suite", () => {
 
   test("openocd command paths use forward slashes for Tcl parsing", () => {
     assert.strictEqual(
-      toOpenOcdPath("c:\\Users\\xiaow\\Downloads\\hard\\ch32l103\\EXAM\\FreeRTOS\\obj\\FreeRTOS.hex"),
+      toOpenOcdPath(
+        "c:\\Users\\xiaow\\Downloads\\hard\\ch32l103\\EXAM\\FreeRTOS\\obj\\FreeRTOS.hex",
+      ),
       "c:/Users/xiaow/Downloads/hard/ch32l103/EXAM/FreeRTOS/obj/FreeRTOS.hex",
     );
   });
 
   test("debug openocd args prefer project launch options", () => {
     const project = createResolvedBuildProject();
-    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
     assert.ok(openOcdPaths);
-    project.model.debug.openOcdConfigOptions = ["-f", "interface/wch-link.cfg", "-f", "target/wch-riscv.cfg"];
+    project.model.debug.openOcdConfigOptions = [
+      "-f",
+      "interface/wch-link.cfg",
+      "-f",
+      "target/wch-riscv.cfg",
+    ];
     project.model.debug.gdbPort = 3334;
     project.model.debug.telnetPort = 4445;
     project.model.debug.tclPort = 6667;
 
-    assert.deepStrictEqual(
-      buildOpenOcdServerArgs(project, openOcdPaths),
-      [
-        "-f",
-        "interface/wch-link.cfg",
-        "-f",
-        "target/wch-riscv.cfg",
-        "-c",
-        "gdb_port 3334",
-        "-c",
-        "telnet_port 4445",
-        "-c",
-        "tcl_port 6667",
-      ],
-    );
+    assert.deepStrictEqual(buildOpenOcdServerArgs(project, openOcdPaths), [
+      "-f",
+      "interface/wch-link.cfg",
+      "-f",
+      "target/wch-riscv.cfg",
+      "-c",
+      "gdb_port 3334",
+      "-c",
+      "telnet_port 4445",
+      "-c",
+      "tcl_port 6667",
+    ]);
   });
 
   test("debug openocd args fall back to MRS default config", () => {
     const project = createResolvedBuildProject();
-    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
     assert.ok(openOcdPaths);
     project.model.debug.openOcdConfigOptions = [];
 
-    assert.deepStrictEqual(
-      buildOpenOcdServerArgs(project, openOcdPaths),
-      [
-        "-f",
-        "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
-        "-c",
-        "gdb_port 3333",
-        "-c",
-        "telnet_port 4444",
-        "-c",
-        "tcl_port 6666",
-      ],
-    );
+    assert.deepStrictEqual(buildOpenOcdServerArgs(project, openOcdPaths), [
+      "-f",
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
+      "-c",
+      "gdb_port 3333",
+      "-c",
+      "telnet_port 4444",
+      "-c",
+      "tcl_port 6666",
+    ]);
   });
 
   test("MRS openocd values resolve WCH variable from component root", () => {
-    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
     assert.ok(openOcdPaths);
 
     assert.strictEqual(
-      resolveMounRiverOpenOcdValue(openOcdPaths, "${WCH:OpenOCD:default}\\bin\\wch-riscv.cfg"),
+      resolveMounRiverOpenOcdValue(
+        openOcdPaths,
+        "${WCH:OpenOCD:default}\\bin\\wch-riscv.cfg",
+      ),
       "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
     );
   });
 
   test("MRS openocd values resolve quoted WCH variable paths", () => {
-    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
     assert.ok(openOcdPaths);
 
     assert.strictEqual(
-      resolveMounRiverOpenOcdValue(openOcdPaths, "\"${WCH:OpenOCD:default}/bin/wch-riscv.cfg\""),
+      resolveMounRiverOpenOcdValue(
+        openOcdPaths,
+        '"${WCH:OpenOCD:default}/bin/wch-riscv.cfg"',
+      ),
       "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
     );
   });
 
   test("MRS openocd executable resolves WCH default variable from install root", () => {
-    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
     assert.ok(openOcdPaths);
 
     assert.strictEqual(
@@ -315,18 +423,25 @@ suite("wch-vscode Test Suite", () => {
   });
 
   test("MRS openocd executable resolves WCH variable suffix from component root", () => {
-    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
     assert.ok(openOcdPaths);
 
     assert.strictEqual(
-      resolveMounRiverOpenOcdExecutable(openOcdPaths, "${WCH:OpenOCD:default}\\bin\\openocd.exe"),
+      resolveMounRiverOpenOcdExecutable(
+        openOcdPaths,
+        "${WCH:OpenOCD:default}\\bin\\openocd.exe",
+      ),
       "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\openocd.exe",
     );
   });
 
   test("debug openocd executable uses normalized model path", () => {
     const project = createResolvedBuildProject();
-    const openOcdPaths = resolveOpenOcdPaths("F:\\MounRiver\\MounRiver_Studio2");
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
     assert.ok(openOcdPaths);
     project.model.debug.openOcdExecutable = openOcdPaths.executable;
 
@@ -337,7 +452,9 @@ suite("wch-vscode Test Suite", () => {
   });
 
   test("MI parser parses stopped async records", () => {
-    const record = parseMiLine('*stopped,reason="breakpoint-hit",frame={func="main",fullname="C:\\\\p\\\\main.c",line="42"}');
+    const record = parseMiLine(
+      '*stopped,reason="breakpoint-hit",frame={func="main",fullname="C:\\\\p\\\\main.c",line="42"}',
+    );
     assert.strictEqual(record.kind, "exec");
     if (record.kind !== "exec") {
       return;
@@ -351,40 +468,65 @@ suite("wch-vscode Test Suite", () => {
   });
 
   test("MI parser parses breakpoint, stack, variables, and error records", () => {
-    const breakpoint = parseMiLine('7^done,bkpt={number="1",type="hw breakpoint",disp="keep",enabled="y"}');
+    const breakpoint = parseMiLine(
+      '7^done,bkpt={number="1",type="hw breakpoint",disp="keep",enabled="y"}',
+    );
     assert.strictEqual(breakpoint.kind, "result");
     if (breakpoint.kind === "result") {
       assert.strictEqual(breakpoint.token, 7);
-      assert.strictEqual(getString(getTuple(breakpoint.results.bkpt)?.type), "hw breakpoint");
+      assert.strictEqual(
+        getString(getTuple(breakpoint.results.bkpt)?.type),
+        "hw breakpoint",
+      );
     }
 
-    const stack = parseMiLine('8^done,stack=[frame={level="0",func="main",fullname="C:\\\\p\\\\main.c",line="9"}]');
+    const stack = parseMiLine(
+      '8^done,stack=[frame={level="0",func="main",fullname="C:\\\\p\\\\main.c",line="9"}]',
+    );
     assert.strictEqual(stack.kind, "result");
     if (stack.kind === "result") {
       const frame = getTuple(getTuple(getList(stack.results.stack)[0])?.frame);
       assert.strictEqual(getString(frame?.fullname), "C:\\p\\main.c");
     }
 
-    const multiFrameStack = parseMiLine('81^done,stack=[frame={level="0",func="task2_task"},frame={level="1",func="vPortTaskWrapper"}]');
+    const multiFrameStack = parseMiLine(
+      '81^done,stack=[frame={level="0",func="task2_task"},frame={level="1",func="vPortTaskWrapper"}]',
+    );
     assert.strictEqual(multiFrameStack.kind, "result");
     if (multiFrameStack.kind === "result") {
       const frames = getList(multiFrameStack.results.stack);
       assert.strictEqual(frames.length, 2);
-      assert.strictEqual(getString(getTuple(getTuple(frames[0])?.frame)?.func), "task2_task");
-      assert.strictEqual(getString(getTuple(getTuple(frames[1])?.frame)?.func), "vPortTaskWrapper");
+      assert.strictEqual(
+        getString(getTuple(getTuple(frames[0])?.frame)?.func),
+        "task2_task",
+      );
+      assert.strictEqual(
+        getString(getTuple(getTuple(frames[1])?.frame)?.func),
+        "vPortTaskWrapper",
+      );
     }
 
-    const variables = parseMiLine('9^done,variables=[{name="counter",value="3"},{name="flag",type="int"}]');
+    const variables = parseMiLine(
+      '9^done,variables=[{name="counter",value="3"},{name="flag",type="int"}]',
+    );
     assert.strictEqual(variables.kind, "result");
     if (variables.kind === "result") {
-      assert.strictEqual(getString(getTuple(getList(variables.results.variables)[0])?.value), "3");
+      assert.strictEqual(
+        getString(getTuple(getList(variables.results.variables)[0])?.value),
+        "3",
+      );
     }
 
-    const error = parseMiLine('10^error,msg="No hardware breakpoint available"');
+    const error = parseMiLine(
+      '10^error,msg="No hardware breakpoint available"',
+    );
     assert.strictEqual(error.kind, "result");
     if (error.kind === "result") {
       assert.strictEqual(error.resultClass, "error");
-      assert.strictEqual(getString(error.results.msg), "No hardware breakpoint available");
+      assert.strictEqual(
+        getString(error.results.msg),
+        "No hardware breakpoint available",
+      );
     }
   });
 
@@ -405,14 +547,41 @@ function createResolvedBuildProject(): ResolvedBuildProject {
       index: 0,
     },
     model,
-    outputDirectory: path.join(model.identity.folderPath, model.build.configName),
+    outputDirectory: path.join(
+      model.identity.folderPath,
+      model.build.configName,
+    ),
     targetBaseName: model.identity.name,
-    elfPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.elf`),
-    hexPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.hex`),
-    lstPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.lst`),
-    binPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.bin`),
-    sizPath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.siz`),
-    mapFilePath: path.join(model.identity.folderPath, model.build.configName, `${model.identity.name}.map`),
+    elfPath: path.join(
+      model.identity.folderPath,
+      model.build.configName,
+      `${model.identity.name}.elf`,
+    ),
+    hexPath: path.join(
+      model.identity.folderPath,
+      model.build.configName,
+      `${model.identity.name}.hex`,
+    ),
+    lstPath: path.join(
+      model.identity.folderPath,
+      model.build.configName,
+      `${model.identity.name}.lst`,
+    ),
+    binPath: path.join(
+      model.identity.folderPath,
+      model.build.configName,
+      `${model.identity.name}.bin`,
+    ),
+    sizPath: path.join(
+      model.identity.folderPath,
+      model.build.configName,
+      `${model.identity.name}.siz`,
+    ),
+    mapFilePath: path.join(
+      model.identity.folderPath,
+      model.build.configName,
+      `${model.identity.name}.map`,
+    ),
     linkerScriptPath: path.join(model.identity.folderPath, "Ld", "Link.ld"),
     toolchainPaths: {
       rootPath: "F:\\MounRiver\\MounRiver_Studio2",
@@ -434,15 +603,20 @@ function createParsedProject(options: {
   runCommands?: Record<string, unknown>;
   launchStrings?: Record<string, string>;
   launchBooleans?: Record<string, boolean>;
+  linkerMisc?: Record<string, unknown>;
 }): ParsedWchProject {
-  const stringAttribute = Object.entries(options.launchStrings ?? {}).map(([key, value]) => ({
-    "@_key": key,
-    "@_value": value,
-  }));
-  const booleanAttribute = Object.entries(options.launchBooleans ?? {}).map(([key, value]) => ({
-    "@_key": key,
-    "@_value": String(value),
-  }));
+  const stringAttribute = Object.entries(options.launchStrings ?? {}).map(
+    ([key, value]) => ({
+      "@_key": key,
+      "@_value": value,
+    }),
+  );
+  const booleanAttribute = Object.entries(options.launchBooleans ?? {}).map(
+    ([key, value]) => ({
+      "@_key": key,
+      "@_value": String(value),
+    }),
+  );
 
   return {
     folderPath: "C:\\workspace\\DemoProject",
@@ -479,6 +653,9 @@ function createParsedProject(options: {
               configurations: [
                 {
                   name: "obj",
+                  clinker: {
+                    miscellaneous: options.linkerMisc ?? {},
+                  },
                 },
               ],
             },
@@ -530,12 +707,26 @@ function createModel(): WchProjectModel {
     warningFlags: [],
     debuggingFlags: [],
     otherCompilerFlags: [],
-    args: ["-march=rv32imac", "-mabi=ilp32", "-O0", "-ffunction-sections", "-fdata-sections", "-std=gnu11"],
+    args: [
+      "-march=rv32imac",
+      "-mabi=ilp32",
+      "-O0",
+      "-ffunction-sections",
+      "-fdata-sections",
+      "-std=gnu11",
+    ],
   };
   const cpp = {
     ...c,
     standard: "gnu++17",
-    args: ["-march=rv32imac", "-mabi=ilp32", "-O0", "-ffunction-sections", "-fdata-sections", "-std=gnu++17"],
+    args: [
+      "-march=rv32imac",
+      "-mabi=ilp32",
+      "-O0",
+      "-ffunction-sections",
+      "-fdata-sections",
+      "-std=gnu++17",
+    ],
   };
 
   return {
@@ -615,8 +806,15 @@ function createModel(): WchProjectModel {
         linkerFlags: [],
         otherLinkerFlags: [],
         otherObjects: [],
-        mapFile: "\"${BuildArtifactFileBaseName}.map\"",
-        args: ["-march=rv32imac", "-mabi=ilp32", "-nostartfiles", "-Wl,--gc-sections", "--specs=nano.specs", "--specs=nosys.specs"],
+        mapFile: '"${BuildArtifactFileBaseName}.map"',
+        args: [
+          "-march=rv32imac",
+          "-mabi=ilp32",
+          "-nostartfiles",
+          "-Wl,--gc-sections",
+          "--specs=nano.specs",
+          "--specs=nosys.specs",
+        ],
       },
       postBuild: {
         createFlash: true,

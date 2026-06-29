@@ -161,9 +161,11 @@ function buildWchProjectModel(
   const buildOtherCompilerFlags = splitSpaceFlags(
     getString(cCompilerMisc?.other_compiler_flags),
   );
-  const linkerFlags = getStringArray(linkerMisc?.linker_flags);
-  const otherLinkerFlags = splitSpaceFlags(
-    getString(linkerMisc?.other_linker_flags),
+  const linkerFlags = normalizeLinkerFlags(
+    getStringArray(linkerMisc?.linker_flags),
+  );
+  const otherLinkerFlags = normalizeLinkerFlags(
+    splitSpaceFlags(getString(linkerMisc?.other_linker_flags)),
   );
   const linkerConfig = {
     doNotUseStandardStartFiles:
@@ -351,9 +353,13 @@ function buildWchProjectModel(
           doNotSearchSystemDirectories: assemblerDoNotSearchSystemDirectories,
           preprocessOnly: assemblerPreprocessOnly,
           includePaths: getStringArray(assemblerIncludes?.include_paths),
-          includeSystemPaths: getStringArray(assemblerIncludes?.include_system_paths),
+          includeSystemPaths: getStringArray(
+            assemblerIncludes?.include_system_paths,
+          ),
           includeFiles: getStringArray(assemblerIncludes?.include_files),
-          definedSymbols: getStringArray(assemblerPreprocessor?.defined_symbols),
+          definedSymbols: getStringArray(
+            assemblerPreprocessor?.defined_symbols,
+          ),
           undefinedSymbols: assemblerUndefinedSymbols,
           assemblerFlags,
           generateAssemblerListing: assemblerGenerateAssemblerListing,
@@ -386,19 +392,28 @@ function buildWchProjectModel(
           includeFiles: getStringArray(cIncludes?.include_files),
           definedSymbols: getStringArray(cPreprocessor?.defined_symbols),
           undefinedSymbols: cUndefinedSymbols,
-          doNotSearchSystemDirectories: cPreprocessorDoNotSearchSystemDirectories,
+          doNotSearchSystemDirectories:
+            cPreprocessorDoNotSearchSystemDirectories,
           doNotSearchSystemCppDirectories: false,
           preprocessOnly: cPreprocessOnly,
           generateAssemblerListing: cGenerateAssemblerListing,
           saveTemporaryFiles: cSaveTemporaryFiles,
           verbose: cVerbose,
           optimizationFlags: cOptimizationFlags,
-          warningFlags: uniqueStrings([...commonWarningFlags, ...cSpecificWarningFlags, ...cWarningFlags]),
+          warningFlags: uniqueStrings([
+            ...commonWarningFlags,
+            ...cSpecificWarningFlags,
+            ...cWarningFlags,
+          ]),
           debuggingFlags: cDebuggingFlags,
           otherCompilerFlags: cOtherCompilerFlags,
           args: uniqueStrings([
             ...architectureArgs,
-            ...buildCommonCompilerArgs(optimizationLevel, functionSections, dataSections),
+            ...buildCommonCompilerArgs(
+              optimizationLevel,
+              functionSections,
+              dataSections,
+            ),
             ...commonOptimizationFlags,
             ...(cStandard ? [`-std=${cStandard}`] : []),
             ...cOptimizationFlags,
@@ -408,9 +423,17 @@ function buildWchProjectModel(
               cPreprocessOnly,
               cUndefinedSymbols,
             ),
-            ...uniqueStrings([...commonWarningFlags, ...cSpecificWarningFlags, ...cWarningFlags]),
+            ...uniqueStrings([
+              ...commonWarningFlags,
+              ...cSpecificWarningFlags,
+              ...cWarningFlags,
+            ]),
             ...cDebuggingFlags,
-            ...buildCompilerMiscArgs(cGenerateAssemblerListing, cSaveTemporaryFiles, cVerbose),
+            ...buildCompilerMiscArgs(
+              cGenerateAssemblerListing,
+              cSaveTemporaryFiles,
+              cVerbose,
+            ),
             ...buildOtherCompilerFlags,
             ...cOtherCompilerFlags,
           ]),
@@ -422,19 +445,31 @@ function buildWchProjectModel(
           includeFiles: getStringArray(cppIncludes?.include_files),
           definedSymbols: getStringArray(cppPreprocessor?.defined_symbols),
           undefinedSymbols: cppUndefinedSymbols,
-          doNotSearchSystemDirectories: cppPreprocessorDoNotSearchSystemDirectories,
+          doNotSearchSystemDirectories:
+            cppPreprocessorDoNotSearchSystemDirectories,
           doNotSearchSystemCppDirectories: cppDoNotSearchSystemCppDirectories,
           preprocessOnly: cppPreprocessOnly,
           generateAssemblerListing: cppGenerateAssemblerListing,
           saveTemporaryFiles: cppSaveTemporaryFiles,
           verbose: cppVerbose,
-          optimizationFlags: uniqueStrings([...cppSpecificOptimizationFlags, ...cppOptimizationFlags]),
-          warningFlags: uniqueStrings([...commonWarningFlags, ...cppSpecificWarningFlags, ...cppWarningFlags]),
+          optimizationFlags: uniqueStrings([
+            ...cppSpecificOptimizationFlags,
+            ...cppOptimizationFlags,
+          ]),
+          warningFlags: uniqueStrings([
+            ...commonWarningFlags,
+            ...cppSpecificWarningFlags,
+            ...cppWarningFlags,
+          ]),
           debuggingFlags: cppDebuggingFlags,
           otherCompilerFlags: cppOtherCompilerFlags,
           args: uniqueStrings([
             ...architectureArgs,
-            ...buildCommonCompilerArgs(optimizationLevel, functionSections, dataSections),
+            ...buildCommonCompilerArgs(
+              optimizationLevel,
+              functionSections,
+              dataSections,
+            ),
             ...commonOptimizationFlags,
             ...(cppStandard ? [`-std=${cppStandard}`] : []),
             ...cppSpecificOptimizationFlags,
@@ -445,9 +480,17 @@ function buildWchProjectModel(
               cppPreprocessOnly,
               cppUndefinedSymbols,
             ),
-            ...uniqueStrings([...commonWarningFlags, ...cppSpecificWarningFlags, ...cppWarningFlags]),
+            ...uniqueStrings([
+              ...commonWarningFlags,
+              ...cppSpecificWarningFlags,
+              ...cppWarningFlags,
+            ]),
             ...cppDebuggingFlags,
-            ...buildCompilerMiscArgs(cppGenerateAssemblerListing, cppSaveTemporaryFiles, cppVerbose),
+            ...buildCompilerMiscArgs(
+              cppGenerateAssemblerListing,
+              cppSaveTemporaryFiles,
+              cppVerbose,
+            ),
             ...buildOtherCompilerFlags,
             ...cppOtherCompilerFlags,
           ]),
@@ -456,7 +499,9 @@ function buildWchProjectModel(
       linker: {
         script: getFirstString(linkerGeneral?.scriptFiles),
         libraries: getStringArray(linkerLibraries?.libraries),
-        librarySearchPaths: getStringArray(linkerLibraries?.library_search_path),
+        librarySearchPaths: getStringArray(
+          linkerLibraries?.library_search_path,
+        ),
         linkerFlags,
         otherLinkerFlags,
         otherObjects: getStringArray(linkerMisc?.other_objects),
@@ -556,8 +601,7 @@ function buildWchProjectModel(
                 "com.mounriver.debug.gdbjtag.openocd.gdbClientOtherCommands",
               ),
             ),
-      stopAt:
-        resolveStopAt(runCommands, launchAttributes),
+      stopAt: resolveStopAt(runCommands, launchAttributes),
       firstResetType:
         getString(initCommands?.initResetType) ??
         getString(
@@ -792,17 +836,26 @@ function buildMarch(
   targetArchitecture: string,
   riscvExtensions: string[],
 ): string {
-  const extensions = riscvExtensions
-    .map((item) => item.toLowerCase())
-    .filter((item) => item !== "zmmul");
-  const suffix = extensions.join("");
   const base = targetArchitecture || "rv32i";
 
-  if (riscvExtensions.includes("Zmmul")) {
-    return suffix ? `${base}${suffix}_zmmul` : `${base}_zmmul`;
-  }
+  // Single-letter standard extensions in fixed order
+  let single = "";
+  if (riscvExtensions.includes("M")) single += "m";
+  if (riscvExtensions.includes("A")) single += "a";
+  if (riscvExtensions.includes("C")) single += "c";
 
-  return `${base}${suffix}`;
+  // Multi-letter extensions as underscore-prefixed tokens; XW goes last
+  const hasXW = riscvExtensions.includes("XW");
+  const multiTokens: string[] = [];
+  if (riscvExtensions.includes("B")) multiTokens.push("_zba", "_zbb", "_zbc", "_zbs");
+  if (riscvExtensions.includes("Zmmul")) multiTokens.push("_zmmul");
+  const hasZExts = multiTokens.length > 0;
+  if (hasXW && hasZExts) multiTokens.push("_xw");
+
+  const multiSuffix = multiTokens.join("");
+  const xwDirect = hasXW && !hasZExts ? "xw" : "";
+
+  return `${base}${single}${multiSuffix}${xwDirect}`;
 }
 
 function buildCommonCompilerArgs(
@@ -1179,6 +1232,33 @@ function buildLinkMiscArgs(
   ]);
 }
 
+function normalizeLinkerFlags(flags: string[]): string[] {
+  return uniqueStrings(
+    flags
+      .map((flag) => normalizeSingleLinkerFlag(flag))
+      .filter((flag) => flag.length > 0),
+  );
+}
+
+function normalizeSingleLinkerFlag(flag: string): string {
+  const trimmed = flag.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  // Keep already-wrapped linker options and GCC specs as-is.
+  if (trimmed.startsWith("-Wl,") || trimmed.startsWith("--specs=")) {
+    return trimmed;
+  }
+
+  // Raw GNU ld long options must be forwarded through GCC.
+  if (trimmed.startsWith("--")) {
+    return `-Wl,${trimmed}`;
+  }
+
+  return trimmed;
+}
+
 // MRS "hex and bin" 选项存储的值为 "ihexAndbinary"，标准 objcopy 不支持。
 // 将其映射为 ihex（与 MRS 自己生成的 makefile 行为一致）。
 const VALID_BFD_TARGETS = new Set(["ihex", "binary", "srec"]);
@@ -1296,7 +1376,9 @@ function resolveOpenOcdDebugConfig(
   if (!openOcdPaths) {
     return {
       executable: normalizeMounRiverArgument(executable),
-      configOptions: normalizedConfigOptions.map((item) => normalizeMounRiverArgument(item)),
+      configOptions: normalizedConfigOptions.map((item) =>
+        normalizeMounRiverArgument(item),
+      ),
     };
   }
 
@@ -1381,7 +1463,9 @@ function getLaunchCommands(value: unknown): string[] {
 }
 
 function getLaunchArguments(value: unknown): string[] {
-  return getLaunchCommands(value).flatMap((item) => splitCommandLineArguments(item));
+  return getLaunchCommands(value).flatMap((item) =>
+    splitCommandLineArguments(item),
+  );
 }
 
 function splitCommandLineArguments(value: string): string[] {

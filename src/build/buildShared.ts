@@ -227,17 +227,27 @@ export function resolveToolExecutablePrefix(gdbExecutable: string): string | und
 }
 
 export function buildMarch(model: WchProjectModel): string {
-	const extensions = model.build.riscvExtensions
-		.map((item) => item.toLowerCase())
-		.filter((item) => item !== 'zmmul');
-	const suffix = extensions.join('');
+	const exts = model.build.riscvExtensions;
 	const base = model.build.targetArchitecture || 'rv32i';
 
-	if (model.build.riscvExtensions.includes('Zmmul')) {
-		return suffix ? `${base}${suffix}_zmmul` : `${base}_zmmul`;
-	}
+	// Single-letter standard extensions in fixed order
+	let single = '';
+	if (exts.includes('M')) single += 'm';
+	if (exts.includes('A')) single += 'a';
+	if (exts.includes('C')) single += 'c';
 
-	return `${base}${suffix}`;
+	// Multi-letter extensions as underscore-prefixed tokens; XW goes last
+	const hasXW = exts.includes('XW');
+	const multiTokens: string[] = [];
+	if (exts.includes('B')) multiTokens.push('_zba', '_zbb', '_zbc', '_zbs');
+	if (exts.includes('Zmmul')) multiTokens.push('_zmmul');
+	const hasZExts = multiTokens.length > 0;
+	if (hasXW && hasZExts) multiTokens.push('_xw');
+
+	const multiSuffix = multiTokens.join('');
+	const xwDirect = hasXW && !hasZExts ? 'xw' : '';
+
+	return `${base}${single}${multiSuffix}${xwDirect}`;
 }
 
 export function normalizeLinkedFolderLocation(value: string): string {
