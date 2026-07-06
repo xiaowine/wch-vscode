@@ -268,6 +268,11 @@ export function resolveProjectFileSystemPath(model: WchProjectModel, value: stri
 		return path.normalize(normalizedValue);
 	}
 
+	const buildDirectoryRelativePath = resolveBuildDirectoryRelativePath(model, normalizedValue);
+	if (buildDirectoryRelativePath) {
+		return buildDirectoryRelativePath;
+	}
+
 	return path.resolve(model.identity.folderPath, normalizedValue);
 }
 
@@ -529,6 +534,25 @@ function normalizeProjectPathValue(model: WchProjectModel, value: string): strin
 		model.identity.name || model.identity.baseName,
 		resolveArtifactBaseName(model),
 	);
+}
+
+function resolveBuildDirectoryRelativePath(model: WchProjectModel, value: string): string | null {
+	if (!value.startsWith('../')) {
+		return null;
+	}
+
+	const buildDirectoryName = model.build.configName.trim();
+	if (!buildDirectoryName) {
+		return null;
+	}
+
+	const candidatePath = path.resolve(model.identity.folderPath, buildDirectoryName, value);
+	const mappedLinkedFolderPath = mapLinkedFolderFileSystemPath(
+		model,
+		candidatePath.replace(/\\/g, '/'),
+	);
+
+	return mappedLinkedFolderPath ?? path.normalize(candidatePath);
 }
 
 function mapLinkedFolderFileSystemPath(model: WchProjectModel, value: string): string | null {

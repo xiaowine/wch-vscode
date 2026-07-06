@@ -166,6 +166,24 @@ suite("wch-vscode Test Suite", () => {
     );
   });
 
+  test("build resolver maps MRS build-directory relative paths", () => {
+    const model = createModel();
+    model.build.configName = "Debug";
+    assert.strictEqual(
+      resolveProjectFileSystemPath(model, "../StdPeriphDriver/inc"),
+      path.resolve(model.identity.folderPath, "StdPeriphDriver", "inc"),
+    );
+  });
+
+  test("build resolver maps MRS build-directory relative linked folder paths", () => {
+    const model = createModel();
+    model.build.configName = "Debug";
+    assert.strictEqual(
+      resolveProjectFileSystemPath(model, "../Core/startup"),
+      path.resolve(model.identity.folderPath, "..\\shared\\Core", "startup"),
+    );
+  });
+
   test("buildMarch keeps zmmul suffix ordering", () => {
     const model = createModel();
     model.build.riscvExtensions = ["M", "A", "C", "Zmmul"];
