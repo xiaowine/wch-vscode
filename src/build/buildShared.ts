@@ -121,6 +121,33 @@ export function resolveOpenOcdPaths(rootPath: string): ResolvedOpenOcdPaths | un
 	};
 }
 
+export function appendOpenOcdChipIdArgs(args: string[], mcuType: string): void {
+	if (hasOpenOcdChipIdArg(args)) {
+		return;
+	}
+
+	const chipId = normalizeOpenOcdChipId(mcuType);
+	if (chipId) {
+		args.push('-c', `chip_id ${chipId}`);
+	}
+}
+
+export function normalizeOpenOcdChipId(mcuType: string): string {
+	const normalizedMcuType = normalizeMounRiverArgument(mcuType);
+	switch (normalizedMcuType.toUpperCase()) {
+		case 'CH32V00X':
+			return 'CH32V003';
+		case 'CH56X':
+			return 'CH565/9';
+		default:
+			return normalizedMcuType;
+	}
+}
+
+function hasOpenOcdChipIdArg(args: string[]): boolean {
+	return args.some((arg) => /(?:^|\s)chip_id(?:\s|$)/i.test(arg));
+}
+
 export function resolveMounRiverOpenOcdExecutable(
 	openOcdPaths: ResolvedOpenOcdPaths,
 	configuredExecutable: string,

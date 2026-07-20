@@ -12,10 +12,12 @@ import {
   resolveMounRiverOpenOcdExecutable,
   resolveMounRiverOpenOcdValue,
   resolveMounRiverStudioExecutable,
+  normalizeOpenOcdChipId,
   resolveOpenOcdPaths,
   resolveToolchainDirectoryName,
 } from "../build/buildShared";
 import {
+  buildOpenOcdDownloadArgs,
   normalizeFlashAddress,
   toOpenOcdPath,
 } from "../build/downloadProjectTask";
@@ -216,6 +218,50 @@ suite("wch-vscode Test Suite", () => {
     assert.strictEqual(normalizeFlashAddress("main"), "main");
   });
 
+  test("download adds flash mcu type before initializing OpenOCD", () => {
+    const project = createResolvedBuildProject();
+    project.model.flash.mcuType = "CH59x";
+    project.model.flash.address = "0x00000000";
+
+    assert.deepStrictEqual(
+      buildOpenOcdDownloadArgs(
+        project,
+        "F:\\MounRiver\\OpenOCD\\bin\\wch-riscv.cfg",
+        "C:\\workspace\\DemoProject\\obj\\DemoProject.hex",
+      ),
+      [
+        "-f",
+        "F:\\MounRiver\\OpenOCD\\bin\\wch-riscv.cfg",
+        "-c",
+        "chip_id CH59x",
+        "-c",
+        "init",
+        "-c",
+        "halt",
+        "-c",
+        'program "C:/workspace/DemoProject/obj/DemoProject.hex" 0x00000000 verify reset exit',
+      ],
+    );
+  });
+
+  test("OpenOCD chip id normalization matches MRS aliases", () => {
+    assert.strictEqual(normalizeOpenOcdChipId("CH59x"), "CH59x");
+    assert.strictEqual(normalizeOpenOcdChipId("CH32V00x"), "CH32V003");
+    assert.strictEqual(normalizeOpenOcdChipId("CH56x"), "CH565/9");
+  });
+
+  test("wvproj flash mcutype is preserved for OpenOCD", () => {
+    const [model] = buildWchProjectModels(
+      createParsedProject({
+        flashConfig: {
+          mcutype: "CH59x",
+        },
+      }),
+    );
+
+    assert.strictEqual(model.flash.mcuType, "CH59x");
+  });
+
   test("wvproj setBreak=false disables debug stopAt", () => {
     const [model] = buildWchProjectModels(
       createParsedProject({
@@ -363,6 +409,7 @@ suite("wch-vscode Test Suite", () => {
     project.model.debug.gdbPort = 3334;
     project.model.debug.telnetPort = 4445;
     project.model.debug.tclPort = 6667;
+    project.model.flash.mcuType = "CH59x";
 
     assert.deepStrictEqual(buildOpenOcdServerArgs(project, openOcdPaths), [
       "-f",
@@ -370,12 +417,32 @@ suite("wch-vscode Test Suite", () => {
       "-f",
       "target/wch-riscv.cfg",
       "-c",
+      "chip_id CH59x",
+      "-c",
       "gdb_port 3334",
       "-c",
       "telnet_port 4445",
       "-c",
       "tcl_port 6667",
     ]);
+  });
+
+  test("debug openocd args do not duplicate configured chip id", () => {
+    const project = createResolvedBuildProject();
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
+    assert.ok(openOcdPaths);
+    project.model.debug.openOcdConfigOptions = [
+      "-f",
+      openOcdPaths.config,
+      "-c",
+      "chip_id CH59x",
+    ];
+    project.model.flash.mcuType = "CH59x";
+
+    const args = buildOpenOcdServerArgs(project, openOcdPaths);
+    assert.strictEqual(args.filter((arg) => /chip_id/i.test(arg)).length, 1);
   });
 
   test("debug openocd args fall back to MRS default config", () => {
@@ -622,6 +689,7 @@ function createParsedProject(options: {
   launchStrings?: Record<string, string>;
   launchBooleans?: Record<string, boolean>;
   linkerMisc?: Record<string, unknown>;
+  flashConfig?: Record<string, unknown>;
 }): ParsedWchProject {
   const stringAttribute = Object.entries(options.launchStrings ?? {}).map(
     ([key, value]) => ({
@@ -682,6 +750,7 @@ function createParsedProject(options: {
                 runCommands: options.runCommands ?? {},
               },
             },
+            flashConfig: options.flashConfig ?? {},
           },
         },
       },
@@ -859,6 +928,7 @@ function createModel(): WchProjectModel {
       secondResetType: "",
     },
     flash: {
+      mcuType: "",
       targetPath: "",
       address: "",
       erase: false,

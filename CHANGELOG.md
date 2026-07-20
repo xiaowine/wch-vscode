@@ -2,6 +2,14 @@
 
 本文档记录 WCH VS Code Extension 的主要变更。
 
+## [0.0.8] - 2026-07-11
+
+### 修复
+
+- 修复部分 WCH RISC-V 芯片因 OpenOCD 未指定 `chip_id`，导致下载和调试无法连接目标芯片的问题。
+- 从 MRS2 工程的 `flashConfig.mcutype` 读取 OpenOCD 芯片标识，并在下载和调试启动参数中自动补充 `chip_id`。
+- 下载固件前显式执行 OpenOCD `init` 和 `halt`，确保芯片标识在目标初始化前生效。
+
 ## [0.0.7] - 2026-07-6
 
 ### 修复

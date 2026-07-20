@@ -1,6 +1,10 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { getConfiguredMounRiverStudioPath, resolveOpenOcdPaths } from "./buildShared";
+import {
+  appendOpenOcdChipIdArgs,
+  getConfiguredMounRiverStudioPath,
+  resolveOpenOcdPaths,
+} from "./buildShared";
 import type { ResolvedBuildProject } from "./buildProjectResolver";
 import {
   resolveBuildProjectForExecution,
@@ -96,12 +100,7 @@ function createDownloadTask(
 ): vscode.Task {
   const execution = new vscode.ProcessExecution(
     openOcdPaths.executable,
-    [
-      "-f",
-      openOcdPaths.config,
-      "-c",
-      buildOpenOcdProgramCommand(project, downloadTargetPath),
-    ],
+    buildOpenOcdDownloadArgs(project, openOcdPaths.config, downloadTargetPath),
     {
       cwd: path.dirname(openOcdPaths.executable),
     },
@@ -128,6 +127,24 @@ function createDownloadTask(
     reveal: vscode.TaskRevealKind.Always,
   };
   return task;
+}
+
+export function buildOpenOcdDownloadArgs(
+  project: ResolvedBuildProject,
+  configPath: string,
+  downloadTargetPath: string,
+): string[] {
+  const args = ["-f", configPath];
+  appendOpenOcdChipIdArgs(args, project.model.flash.mcuType);
+  args.push(
+    "-c",
+    "init",
+    "-c",
+    "halt",
+    "-c",
+    buildOpenOcdProgramCommand(project, downloadTargetPath),
+  );
+  return args;
 }
 
 function resolveDownloadTargetPath(project: ResolvedBuildProject): string {

@@ -154,6 +154,7 @@ export type WchDebugModel = {
 };
 
 export type WchFlashModel = {
+	mcuType: string;
 	targetPath: string;
 	address: string;
 	erase: boolean;

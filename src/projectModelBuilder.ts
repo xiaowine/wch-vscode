@@ -620,6 +620,7 @@ function buildWchProjectModel(
         "",
     },
     flash: {
+      mcuType: getString(flashConfig?.mcutype) ?? "",
       targetPath: getString(flashConfig?.target_path) ?? "",
       address: getString(flashConfig?.address) ?? "",
       erase: getBoolean(flashConfig?.erase) ?? false,

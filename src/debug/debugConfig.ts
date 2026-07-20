@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import type { ResolvedBuildProject } from "../build/buildProjectResolver";
 import { resolveProjectFileSystemPath } from "../build/buildProjectResolver";
 import {
+  appendOpenOcdChipIdArgs,
   getConfiguredMounRiverStudioPath,
   resolveOpenOcdPaths,
   type ResolvedOpenOcdPaths,
@@ -89,6 +90,8 @@ export function buildOpenOcdServerArgs(
   const args = project.model.debug.openOcdConfigOptions.length > 0
     ? [...project.model.debug.openOcdConfigOptions]
     : ["-f", openOcdPaths.config];
+
+  appendOpenOcdChipIdArgs(args, project.model.flash.mcuType);
 
   const gdbPort = project.model.debug.gdbPort || 3333;
   const telnetPort = project.model.debug.telnetPort || 4444;
