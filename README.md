@@ -2,6 +2,10 @@
 
 [中文](README.md) | [English](README.en.md)
 
+> **重要提示：本项目是社区开发的第三方 VS Code 扩展，不隶属于 WCH 或 MounRiver Studio，也未获得其官方背书。**
+>
+> 本扩展仅用于辅助在 VS Code 中使用 MounRiver Studio 2 工程。工具链、工程配置及相关软件仍由 MounRiver Studio 2 提供。
+
 一个给MounRiver Studio 2 RISC-V 工程使用的 VS Code 扩展。
 
 它的目标很简单：继续使用你熟悉的 VS Code，同时把 MRS2 工程里的编译、下载、调试配置接进来。你不需要把项目重新迁移成一套新的工程结构，也不需要为了写代码长期停留在 MRS2 里。

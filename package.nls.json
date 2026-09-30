@@ -1,6 +1,6 @@
 {
-  "extension.displayName": "WCH VS Code Extension",
-  "extension.description": "Build, download, and debug WCH MounRiver Studio 2 RISC-V projects in VS Code.",
+  "extension.displayName": "WCH VS Code (Unofficial)",
+  "extension.description": "A community-developed unofficial VS Code extension for working with WCH projects from MounRiver Studio 2.",
   "command.refreshProjects": "Refresh Projects",
   "command.build": "Build",
   "command.clean": "Clean",

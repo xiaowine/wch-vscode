@@ -62,6 +62,7 @@ export const messages = {
     "message.cppToolsConfigGenerated": "WCH: Generated C/C++ configuration file",
     "message.downloadSucceeded": "WCH: Download succeeded",
     "message.mrs2ProjectOpened": "WCH: Project opened in MRS2",
+    "message.unofficialDisclaimer": "Notice: wch-vscode is a third-party VS Code extension developed by winerealms. It is not affiliated with or endorsed by WCH or MounRiver Studio.",
     "mrs2.outputChannel": "wch-vscode MRS2",
     "mrs2.openRequested": "Open in MRS2 requested",
     "mrs2.terminalName": "Open MRS2",

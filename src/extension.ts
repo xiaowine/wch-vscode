@@ -62,9 +62,22 @@ type WchStatusBarItems = {
 };
 
 const WCH_CONFIGURATION_SECTION = "wchVscode";
+const UNOFFICIAL_DISCLAIMER_SHOWN_KEY = "unofficialDisclaimerShown";
 const promptedConfigurationProjects = new Set<string>();
 
+async function showUnofficialDisclaimer(
+  context: vscode.ExtensionContext,
+): Promise<void> {
+  if (context.globalState.get<boolean>(UNOFFICIAL_DISCLAIMER_SHOWN_KEY)) {
+    return;
+  }
+
+  await vscode.window.showWarningMessage(t("message.unofficialDisclaimer"));
+  await context.globalState.update(UNOFFICIAL_DISCLAIMER_SHOWN_KEY, true);
+}
+
 export function activate(context: vscode.ExtensionContext) {
+  void showUnofficialDisclaimer(context);
   // 扩展入口只负责组装侧栏和项目检测服务。
   registerWchDebugLogTracker(context);
   const sidebarProvider = new WchVscodeSidebarProvider();

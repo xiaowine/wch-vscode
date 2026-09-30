@@ -1,6 +1,9 @@
 # WCH VS Code Extension
 
 [中文](README.md) | [English](README.en.md)
+> **Important: This is a community-developed third-party VS Code extension. It is not affiliated with or endorsed by WCH or MounRiver Studio.**
+>
+> This extension only provides VS Code integration for MounRiver Studio 2 projects. The toolchain, project configuration, and related software are still provided by MounRiver Studio 2.
 
 A VS Code extension for MounRiver Studio 2 RISC-V projects.
 

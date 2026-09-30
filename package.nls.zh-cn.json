@@ -1,6 +1,6 @@
 {
-  "extension.displayName": "WCH VS Code 扩展",
-  "extension.description": "在 VS Code 中构建、下载和调试 WCH MounRiver Studio 2 RISC-V 项目。",
+  "extension.displayName": "WCH VS Code（非官方）",
+  "extension.description": "由社区开发的非官方 VS Code 扩展，用于辅助使用 MounRiver Studio 2 WCH 工程。",
   "command.refreshProjects": "刷新项目",
   "command.build": "构建",
   "command.clean": "清理",

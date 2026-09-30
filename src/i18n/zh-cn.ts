@@ -62,6 +62,7 @@ export const messages = {
     "message.cppToolsConfigGenerated": "WCH: 已生成 C/C++ 配置文件",
     "message.downloadSucceeded": "WCH: 下载成功",
     "message.mrs2ProjectOpened": "WCH: 已在 MRS2 打开项目",
+    "message.unofficialDisclaimer": "提示：wch-vscode 是由 winerealms 开发的第三方 VS Code 扩展，不隶属于 WCH 或 MounRiver Studio，也未获得官方背书。",
     "mrs2.outputChannel": "wch-vscode MRS2",
     "mrs2.openRequested": "已请求在 MRS2 中打开",
     "mrs2.terminalName": "打开 MRS2",
