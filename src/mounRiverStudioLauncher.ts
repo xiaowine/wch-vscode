@@ -1,9 +1,11 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import {
   getConfiguredMounRiverStudioPath,
   resolveMounRiverStudioExecutable,
 } from "./build/buildShared";
 import { t } from "./i18n";
+import { getWchProjectState } from "./projectState";
 
 export const OPEN_IN_MOUN_RIVER_STUDIO_COMMAND = "wchVscode.openInMounRiverStudio";
 
@@ -68,6 +70,71 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
     outputChannel.show(true);
     void vscode.window.showErrorMessage(t("error.mrs2OpenFailed", { message: asErrorMessage(error) }));
   }
+}
+
+export type CurrentMrsProjectResolution =
+  | { status: "found"; wvprojPath: string; projectName: string }
+  | { status: "no-folder" | "ambiguous" | "not-mrs" };
+
+export function resolveCurrentMrsProject(): CurrentMrsProjectResolution {
+  const folder = resolveCurrentWorkspaceFolder();
+  if (!folder) {
+    const hasWorkspace = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
+    return { status: hasWorkspace ? "ambiguous" : "no-folder" };
+  }
+
+  const project = getWchProjectState().projects.find(
+    (item) => item.folderPath === folder.uri.fsPath,
+  );
+  const wvprojPath = project?.configurationWvprojPath
+    ?? project?.models[0]?.identity.files.wvproj
+    ?? project?.projectPairs[0]?.wvproj.filePath;
+  if (!wvprojPath) {
+    return { status: "not-mrs" };
+  }
+
+  const model = project?.models[0];
+  const projectName = model?.identity.name
+    || model?.identity.baseName
+    || path.basename(wvprojPath, path.extname(wvprojPath));
+  return { status: "found", wvprojPath, projectName };
+}
+
+export async function openCurrentProjectInMounRiverStudio(): Promise<void> {
+  const resolution = resolveCurrentMrsProject();
+  if (resolution.status !== "found") {
+    void vscode.window.showWarningMessage(getOpenProjectWarning(resolution.status));
+    return;
+  }
+
+  await openProjectInMounRiverStudio(resolution.wvprojPath);
+}
+
+function getOpenProjectWarning(
+  status: Exclude<CurrentMrsProjectResolution["status"], "found">,
+): string {
+  switch (status) {
+    case "no-folder":
+      return t("warning.openMrsProjectNoFolder");
+    case "ambiguous":
+      return t("warning.openMrsProjectAmbiguous");
+    case "not-mrs":
+      return t("warning.openMrsProjectNotMrs");
+  }
+}
+
+// 优先使用当前文件所在的工作区；单工作区时直接使用该文件夹。
+function resolveCurrentWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
+  const activeUri = vscode.window.activeTextEditor?.document.uri;
+  if (activeUri?.scheme === "file") {
+    const activeFolder = vscode.workspace.getWorkspaceFolder(activeUri);
+    if (activeFolder) {
+      return activeFolder;
+    }
+  }
+
+  const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+  return workspaceFolders.length === 1 ? workspaceFolders[0] : undefined;
 }
 
 function getOrCreateHiddenTerminal(cwd: string): vscode.Terminal {

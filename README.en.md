@@ -58,6 +58,15 @@ After installing the extension, search for `wchVscode.mounRiverStudioPath` in VS
 
 This path is the MounRiver Studio 2 installation directory required by the extension.
 
+### Choosing A Build Method
+
+The extension supports two side-by-side build methods. Search for `wchVscode.buildMethod` in VS Code settings and choose:
+
+- `make` (default, plugin parses parameters): the extension parses the project configuration, generates makefiles, and calls `make` from the MRS2 toolchain directly;
+- `mrs-cli` (MRS2 parses parameters): MRS2 parses the project configuration and builds itself, exactly like building inside MRS2.
+
+In `mrs-cli` mode, build, clean, clean and build, build and download, and the build before debugging are all handled by MRS2 parsing the project parameters. MRS2 always exits with code 0, so success is determined by the "Build Finished"/"Build Failed" markers in the log. If an MRS2 instance is already running, the parameters may be forwarded without returning a log; close MRS2 first.
+
 ## Commands And Shortcuts
 
 After opening a folder that contains a WCH MRS2 project, the extension scans the project automatically. You can run these actions from the sidebar, status bar, or command palette:
@@ -80,7 +89,14 @@ Default shortcuts match MRS2:
 
 ## Sidebar
 
-The extension adds a WCH entry to the VS Code Activity Bar, showing key information about detected projects, such as:
+The sidebar is split into two views:
+
+- **Overview**: detected project information;
+- **Settings & Tools**: MRS directory setting, build method setting, and opening the current project in MRS2.
+
+"Open Project in MRS2" resolves the MRS project for the workspace containing the current file. If the current folder is not an MRS project, the extension shows a warning and does not open anything.
+
+The Overview view shows:
 
 - Project name and path;
 - Toolchain type;

@@ -13,6 +13,12 @@
   "viewContainer.title": "WCH VS Code Extension",
   "view.projectFiles": "WCH Files",
   "view.overview": "Overview",
+  "view.tools": "Settings & Tools",
   "configuration.title": "wch-vscode",
-  "configuration.mounRiverStudioPath.description": "MounRiver Studio installation root, for example F:\\MounRiver\\MounRiver_Studio2. When generating C/C++ configuration, the extension automatically resolves resources\\app\\resources\\win32\\components\\WCH\\Toolchain\\RISC-V Embedded GCC\\bin\\riscv-none-embed-gcc.exe."
+  "configuration.mounRiverStudioPath.description": "MounRiver Studio installation root, for example F:\\MounRiver\\MounRiver_Studio2. When generating C/C++ configuration, the extension automatically resolves resources\\app\\resources\\win32\\components\\WCH\\Toolchain\\RISC-V Embedded GCC\\bin\\riscv-none-embed-gcc.exe.",
+  "configuration.buildMethod.description": "Select how WCH projects are built: the extension parses the project parameters and calls make, or MRS2 parses the parameters and builds.",
+  "configuration.buildMethod.make.label": "Plugin parses parameters",
+  "configuration.buildMethod.mrsCli.label": "MRS2 parses parameters",
+  "configuration.buildMethod.make": "Plugin parses parameters: the extension parses the project configuration, generates makefiles, and calls make directly.",
+  "configuration.buildMethod.mrsCli": "MRS2 parses parameters: MRS2 parses the project configuration and builds itself, identical to building inside MRS2."
 }

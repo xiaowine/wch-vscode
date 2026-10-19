@@ -7,6 +7,8 @@ import {
 } from "./buildProjectResolver";
 import { generateBuildFiles } from "./makefileGenerator";
 import { executeTaskAndWait } from "./taskExecution";
+import { getBuildMethod } from "./buildMethod";
+import { runMounRiverSilentBuild } from "./mrsCliBuild";
 import { t } from "../i18n";
 
 export const BUILD_PROJECT_COMMAND = "wchVscode.buildProject";
@@ -66,6 +68,11 @@ export async function buildResolvedProjectAndWait(
 export async function cleanCurrentProject(
   editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor,
 ): Promise<void> {
+  if (getBuildMethod() === "mrs-cli") {
+    await cleanCurrentProjectWithMrsCli(editor);
+    return;
+  }
+
   let outputDirectory: string;
   try {
     outputDirectory = resolveBuildOutputDirectory(editor);
@@ -81,6 +88,25 @@ export async function cleanCurrentProject(
     void vscode.window.showErrorMessage(
       t("error.cleanOutputDirectoryFailed", { message: asErrorMessage(error) }),
     );
+  }
+}
+
+async function cleanCurrentProjectWithMrsCli(
+  editor: vscode.TextEditor | undefined,
+): Promise<void> {
+  let project: ResolvedBuildProject;
+  try {
+    project = await resolveBuildProjectForExecution(editor);
+  } catch (error) {
+    void vscode.window.showErrorMessage(asErrorMessage(error));
+    return;
+  }
+
+  const outcome = await runMounRiverSilentBuild(project, "clean");
+  if (outcome.reason === "succeeded") {
+    void vscode.window.showInformationMessage(t("message.cleanSucceeded"));
+  } else if (outcome.reason === "failed") {
+    void vscode.window.showErrorMessage(t("error.mrsCliCleanFailed"));
   }
 }
 
@@ -109,36 +135,12 @@ async function runProjectBuild(
     return { started: false };
   }
 
-  if (cleanOutputDirectory) {
-    try {
-      await deleteOutputDirectory(project.outputDirectory);
-    } catch (error) {
-      void vscode.window.showErrorMessage(
-        t("error.cleanOutputDirectoryFailed", { message: asErrorMessage(error) }),
-      );
-      return { started: false };
-    }
-  }
-
-  try {
-    await generateBuildFiles(project);
-  } catch (error) {
-    void vscode.window.showErrorMessage(
-      t("error.generateMakefileFailed", { message: asErrorMessage(error) }),
-    );
-    return { started: false };
-  }
-
-  const task = createBuildTask(project, taskLabelPrefix);
-  if (waitForExit) {
-    return {
-      started: true,
-      exitCode: await executeTaskAndWait(task),
-    };
-  }
-
-  await vscode.tasks.executeTask(task);
-  return { started: true, exitCode: undefined };
+  return runResolvedProjectBuild(
+    project,
+    taskLabelPrefix,
+    cleanOutputDirectory,
+    waitForExit,
+  );
 }
 
 async function runResolvedProjectBuild(
@@ -147,6 +149,21 @@ async function runResolvedProjectBuild(
   cleanOutputDirectory = false,
   waitForExit = false,
 ): Promise<BuildRunResult> {
+  // mrs-cli 交给 MRS2 解析工程参数并构建，与在 MRS2 内编译一致。
+  if (getBuildMethod() === "mrs-cli") {
+    const outcome = await runMounRiverSilentBuild(
+      project,
+      cleanOutputDirectory ? "rebuild" : "build",
+    );
+    if (outcome.reason === "succeeded") {
+      return { started: true, exitCode: 0 };
+    }
+    if (outcome.reason === "failed") {
+      return { started: true, exitCode: 1 };
+    }
+    return { started: false };
+  }
+
   if (cleanOutputDirectory) {
     try {
       await deleteOutputDirectory(project.outputDirectory);
@@ -288,11 +305,12 @@ function showBuildResultMessage(
     return;
   }
 
-  void vscode.window.showErrorMessage(
-    t("error.buildFailedWithExitCode", {
-      exitCode: result.exitCode ?? t("value.unknown"),
-    }),
-  );
+  const failureMessage = getBuildMethod() === "mrs-cli"
+    ? t("error.mrsCliBuildFailed")
+    : t("error.buildFailedWithExitCode", {
+        exitCode: result.exitCode ?? t("value.unknown"),
+      });
+  void vscode.window.showErrorMessage(failureMessage);
 }
 
 function asErrorMessage(error: unknown): string {

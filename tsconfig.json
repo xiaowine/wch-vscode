@@ -3,7 +3,7 @@
     "module": "Node16",
     "target": "ES2022",
     "outDir": "out",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022", "DOM", "ES2024.Promise"],
     "types": ["node", "mocha"],
     "sourceMap": true,
     "rootDir": "src",

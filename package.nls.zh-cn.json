@@ -13,6 +13,12 @@
   "viewContainer.title": "WCH VS Code 扩展",
   "view.projectFiles": "WCH 文件",
   "view.overview": "概览",
+  "view.tools": "设置与工具",
   "configuration.title": "wch-vscode",
-  "configuration.mounRiverStudioPath.description": "MounRiver Studio 安装根目录，例如 F:\\MounRiver\\MounRiver_Studio2。生成 C/C++ 配置时会自动拼接出 resources\\app\\resources\\win32\\components\\WCH\\Toolchain\\RISC-V Embedded GCC\\bin\\riscv-none-embed-gcc.exe。"
+  "configuration.mounRiverStudioPath.description": "MounRiver Studio 安装根目录，例如 F:\\MounRiver\\MounRiver_Studio2。生成 C/C++ 配置时会自动拼接出 resources\\app\\resources\\win32\\components\\WCH\\Toolchain\\RISC-V Embedded GCC\\bin\\riscv-none-embed-gcc.exe。",
+  "configuration.buildMethod.description": "选择 WCH 工程的编译方式：由插件解析工程参数并调用 make，或由 MRS2 解析工程参数并执行构建。",
+  "configuration.buildMethod.make.label": "插件解析参数",
+  "configuration.buildMethod.mrsCli.label": "MRS2 解析参数",
+  "configuration.buildMethod.make": "插件解析参数：由插件解析工程配置、生成 makefile 并直接调用 make。",
+  "configuration.buildMethod.mrsCli": "MRS2 解析参数：由 MRS2 自行解析工程配置并构建，与在 MRS2 内编译一致。"
 }

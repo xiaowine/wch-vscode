@@ -1,15 +1,12 @@
 import * as vscode from "vscode";
 import { GENERATE_CPPTOOLS_CONFIG_COMMAND } from "../cpptoolsConfigGenerator";
 import type { WchProjectModel } from "../models/WchProjectModel";
-import { OPEN_IN_MOUN_RIVER_STUDIO_COMMAND } from "../mounRiverStudioLauncher";
 import type { ProjectDetectionResult } from "../projectDetection";
 import type { ParsedWchProject } from "../projectState";
 import { getWchProjectState } from "../projectState";
 import { t } from "../i18n";
 
 const COPY_SIDEBAR_VALUE_COMMAND = "wchVscode.copySidebarValue";
-const OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND =
-  "wchVscode.openMounRiverStudioPathSetting";
 
 class SidebarItem extends vscode.TreeItem {
   children?: SidebarItem[];
@@ -99,9 +96,7 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
         ? isUnsupported
           ? this.buildUnsupportedProjectItems(project)
           : [
-          this.createMounRiverStudioPathSettingItem(),
           this.createGenerateCppToolsItem(result.folder, models),
-          ...models.map((model) => this.createOpenInMounRiverStudioItem(model)),
           ...models.flatMap((model) => this.buildProjectModelItems(model)),
         ]
         : []),
@@ -137,14 +132,9 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
 
   // 当前只支持 RISC-V 工程，不支持的工程直接给出提示，不继续加载业务数据。
   private buildUnsupportedProjectItems(project?: ParsedWchProject): SidebarItem[] {
-    const items = [
+    return [
       this.createUnsupportedItem(project?.unsupportedReason ?? t("sidebar.unsupportedProjectFallback")),
     ];
-    if (project?.configurationWvprojPath) {
-      items.push(this.createOpenInMounRiverStudioPathItem(project.configurationWvprojPath));
-    }
-
-    return items;
   }
 
   private createUnsupportedItem(message: string): SidebarItem {
@@ -238,41 +228,6 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
     ];
 
     return [root];
-  }
-
-  private createOpenInMounRiverStudioItem(model: WchProjectModel): SidebarItem {
-    return this.createOpenInMounRiverStudioPathItem(
-      model.identity.files.wvproj,
-      model.identity.name || model.identity.baseName,
-    );
-  }
-
-  private createOpenInMounRiverStudioPathItem(
-    wvprojPath: string,
-    description = ".wvproj",
-  ): SidebarItem {
-    const item = new SidebarItem(t("command.openInMrs2"));
-    item.description = description;
-    item.tooltip = t("sidebar.openInMrs2Tooltip", { filePath: wvprojPath });
-    item.iconPath = new vscode.ThemeIcon("window");
-    item.command = {
-      command: OPEN_IN_MOUN_RIVER_STUDIO_COMMAND,
-      title: t("command.openInMrs2"),
-      arguments: [wvprojPath],
-    };
-    return item;
-  }
-
-  private createMounRiverStudioPathSettingItem(): SidebarItem {
-    const item = new SidebarItem(t("command.openMounRiverStudioPathSetting"));
-    item.description = "wchVscode.mounRiverStudioPath";
-    item.tooltip = t("sidebar.openMounRiverStudioPathSettingTooltip");
-    item.iconPath = new vscode.ThemeIcon("settings-gear");
-    item.command = {
-      command: OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND,
-      title: t("command.openMounRiverStudioPathSetting"),
-    };
-    return item;
   }
 
   // 创建分组节点，自动剔除空内容。
@@ -383,5 +338,4 @@ export class WchVscodeSidebarProvider implements vscode.TreeDataProvider<Sidebar
 // 导出复制命令 id，供扩展入口统一注册。
 export {
   COPY_SIDEBAR_VALUE_COMMAND,
-  OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND,
 };

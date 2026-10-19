@@ -9,6 +9,7 @@ import {
   getCurrentBuildTargetTooltip,
 } from "./build/buildProjectTask";
 import { MOUN_RIVER_STUDIO_PATH_SETTING } from "./build/buildShared";
+import { BUILD_METHOD_SETTING } from "./build/buildMethod";
 import {
   ensureCppToolsConfigFileIfMissing,
   generateCppToolsConfigFile,
@@ -39,10 +40,15 @@ import { getWchProjectState } from "./projectState";
 import { resolveCurrentBuildTarget } from "./build/buildProjectResolver";
 import {
   COPY_SIDEBAR_VALUE_COMMAND,
-  OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND,
   WchVscodeSidebarProvider,
 } from "./sidebar/WchVscodeSidebarProvider";
 import {
+  OPEN_BUILD_METHOD_SETTING_COMMAND,
+  OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND,
+  WchToolsSidebarProvider,
+} from "./sidebar/WchToolsSidebarProvider";
+import {
+  openCurrentProjectInMounRiverStudio,
   openProjectInMounRiverStudio,
   OPEN_IN_MOUN_RIVER_STUDIO_COMMAND,
 } from "./mounRiverStudioLauncher";
@@ -82,7 +88,8 @@ export function activate(context: vscode.ExtensionContext) {
   registerWchDebugLogTracker(context);
   const sidebarProvider = new WchVscodeSidebarProvider();
   const projectFilesProvider = new WchProjectFilesProvider();
-  const providers = [sidebarProvider, projectFilesProvider];
+  const toolsSidebarProvider = new WchToolsSidebarProvider();
+  const providers = [sidebarProvider, projectFilesProvider, toolsSidebarProvider];
   const statusBarItems = createWchStatusBarItems();
   const refreshStatusBarItems = async () => {
     updateBuildStatusBarItems(statusBarItems);
@@ -171,8 +178,26 @@ export function activate(context: vscode.ExtensionContext) {
   );
   const openInMounRiverStudioCommand = vscode.commands.registerCommand(
     OPEN_IN_MOUN_RIVER_STUDIO_COMMAND,
-    async (wvprojPath: string) => {
-      await openProjectInMounRiverStudio(wvprojPath);
+    async (wvprojPath?: string) => {
+      if (wvprojPath) {
+        await openProjectInMounRiverStudio(wvprojPath);
+        return;
+      }
+      await openCurrentProjectInMounRiverStudio();
+    },
+  );
+  const toolsConfigurationListener = vscode.workspace.onDidChangeConfiguration(
+    (event) => {
+      if (
+        event.affectsConfiguration(
+          `${WCH_CONFIGURATION_SECTION}.${MOUN_RIVER_STUDIO_PATH_SETTING}`,
+        )
+        || event.affectsConfiguration(
+          `${WCH_CONFIGURATION_SECTION}.${BUILD_METHOD_SETTING}`,
+        )
+      ) {
+        toolsSidebarProvider.refresh();
+      }
     },
   );
   const openMounRiverStudioPathSettingCommand = vscode.commands.registerCommand(
@@ -184,7 +209,15 @@ export function activate(context: vscode.ExtensionContext) {
       );
     },
   );
-
+  const openBuildMethodSettingCommand = vscode.commands.registerCommand(
+    OPEN_BUILD_METHOD_SETTING_COMMAND,
+    async () => {
+      await vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        `${WCH_CONFIGURATION_SECTION}.${BUILD_METHOD_SETTING}`,
+      );
+    },
+  );
   context.subscriptions.push(
     buildProjectCommand,
     cleanProjectCommand,
@@ -197,16 +230,25 @@ export function activate(context: vscode.ExtensionContext) {
     generateCppToolsConfigCommand,
     openInMounRiverStudioCommand,
     openMounRiverStudioPathSettingCommand,
+    openBuildMethodSettingCommand,
+    toolsConfigurationListener,
     refreshProjectsCommand,
     vscode.window.registerTreeDataProvider(
       "wchVscodeSidebarView",
       sidebarProvider,
     ),
     vscode.window.registerTreeDataProvider(
+      "wchVscodeToolsView",
+      toolsSidebarProvider,
+    ),
+    vscode.window.registerTreeDataProvider(
       "wchVscodeProjectFilesView",
       projectFilesProvider,
     ),
     vscode.window.onDidChangeActiveTextEditor(refreshStatusBarItems),
+    vscode.window.onDidChangeActiveTextEditor(() =>
+      toolsSidebarProvider.refresh(),
+    ),
   );
 }
 
