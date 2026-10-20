@@ -653,6 +653,32 @@ suite("wch-vscode Test Suite", () => {
       "F:\\MounRiver\\MounRiver_Studio2\\MounRiver Studio 2.exe",
     );
   });
+
+  test("MRS executable resolves the installed version", async () => {
+    const mrs3Root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "wch-vscode-mrs3-"),
+    );
+    const mrs2Root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "wch-vscode-mrs2-"),
+    );
+
+    try {
+      await fs.writeFile(path.join(mrs3Root, "MounRiver Studio 3.exe"), "");
+      assert.strictEqual(
+        resolveMounRiverStudioExecutable(mrs3Root),
+        path.join(mrs3Root, "MounRiver Studio 3.exe"),
+      );
+
+      await fs.writeFile(path.join(mrs2Root, "MounRiver Studio 2.exe"), "");
+      assert.strictEqual(
+        resolveMounRiverStudioExecutable(mrs2Root),
+        path.join(mrs2Root, "MounRiver Studio 2.exe"),
+      );
+    } finally {
+      await fs.rm(mrs3Root, { recursive: true, force: true });
+      await fs.rm(mrs2Root, { recursive: true, force: true });
+    }
+  });
 });
 
 function createResolvedBuildProject(): ResolvedBuildProject {

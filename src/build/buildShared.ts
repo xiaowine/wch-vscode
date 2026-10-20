@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { WchProjectModel } from '../models/WchProjectModel';
@@ -60,12 +61,22 @@ export type ResolvedOpenOcdPaths = {
 	scripts: string;
 };
 
-export function resolveMounRiverStudioExecutable(rootPath: string): string | undefined {
+// MRS2 与 MRS3 的主程序文件名不同，同一安装目录只会存在其中一个。
+const MOUN_RIVER_STUDIO_3_EXECUTABLE = 'MounRiver Studio 3.exe';
+const MOUN_RIVER_STUDIO_2_EXECUTABLE = 'MounRiver Studio 2.exe';
+
+export function resolveMounRiverStudioExecutable(
+	rootPath: string,
+	exists: (candidatePath: string) => boolean = existsSync,
+): string | undefined {
 	if (!rootPath) {
 		return undefined;
 	}
 
-	return path.join(rootPath, 'MounRiver Studio 2.exe');
+	const executableName = exists(path.join(rootPath, MOUN_RIVER_STUDIO_3_EXECUTABLE))
+		? MOUN_RIVER_STUDIO_3_EXECUTABLE
+		: MOUN_RIVER_STUDIO_2_EXECUTABLE;
+	return path.join(rootPath, executableName);
 }
 
 export function getConfiguredMounRiverStudioPath(): string {
