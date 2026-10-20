@@ -6,6 +6,7 @@ import {
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { DebugProtocol } from "@vscode/debugprotocol";
+import { decodeGdbPath, resolveGdbBreakpointFile, resolveGdbFilePath } from "./gdbPath";
 import {
   parseMiLine,
   getList,
@@ -410,8 +411,9 @@ class WchRiscvDebugSession {
   }
 
   private resolveSourcePath(rawPath: string): string {
-    // 相对路径优先按 ELF 所在目录解析，其次按工程根目录解析。
-    const normalizedRawPath = path.normalize(rawPath);
+    // GDB 的 MI 输出会转义非 ASCII 字节，先还原为 Windows 的 GBK 路径。
+    const decodedPath = decodeGdbPath(rawPath);
+    const normalizedRawPath = path.normalize(decodedPath);
     if (path.isAbsolute(normalizedRawPath)) {
       return normalizedRawPath;
     }
@@ -691,8 +693,9 @@ class WchRiscvDebugSession {
     const nextGdbNumbersByLine = new Map<number, string>();
     for (const breakpoint of sourceBreakpoints) {
       try {
+        const breakpointFile = resolveGdbBreakpointFile(this.launchArgs?.cwd ?? "", sourcePath);
         const record = await this.gdbCommand(
-          `-break-insert -h ${quoteMiArgument(`${sourcePath}:${breakpoint.line}`)}`,
+          `-break-insert -h ${quoteMiArgument(`${breakpointFile}:${breakpoint.line}`)}`,
         );
         const number = getString(getTuple(record.results.bkpt)?.number);
         if (number) {
@@ -906,7 +909,7 @@ class WchRiscvDebugSession {
     await this.gdbCommand("-gdb-set target-async on");
     this.logDebugMessage("Initializing GDB: loading ELF symbols");
     await this.gdbCommand(
-      `-file-exec-and-symbols ${quoteMiArgument(args.elfPath)}`,
+      `-file-exec-and-symbols ${quoteMiArgument(resolveGdbFilePath(args.cwd, args.elfPath))}`,
     );
     this.logDebugMessage(`Initializing GDB: connecting to ${args.host}:${args.gdbPort}`);
     await this.gdbCommand(
@@ -1342,10 +1345,12 @@ class WchRiscvDebugSession {
       return undefined;
     }
 
+    const cwd = this.launchArgs?.cwd ?? "";
     const result = spawnSync(
       gdbPath,
-      ["-batch", elfPath, "-ex", `disassemble ${symbol}`],
+      ["-batch", resolveGdbFilePath(cwd, elfPath), "-ex", `disassemble ${symbol}`],
       {
+        cwd: cwd || undefined,
         encoding: "utf8",
         windowsHide: true,
       },
@@ -1688,7 +1693,7 @@ function getPlainString(value: unknown): string {
 }
 
 function asErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return decodeGdbPath(error instanceof Error ? error.message : String(error));
 }
 
 function formatExitCode(code: number | null): string {

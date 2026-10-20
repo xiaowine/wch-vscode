@@ -120,7 +120,15 @@ class MiValueParser {
           output += "\r";
           break;
         default:
-          output += escaped ?? "";
+          if (escaped >= "0" && escaped <= "7") {
+            let octal = escaped;
+            while (octal.length < 3 && /[0-7]/.test(this.text[this.index] ?? "")) {
+              octal += this.text[this.index++];
+            }
+            output += String.fromCharCode(Number.parseInt(octal, 8));
+          } else {
+            output += escaped ?? "";
+          }
           break;
       }
     }
