@@ -155,6 +155,30 @@ export function appendOpenOcdChipIdArgs(args: string[], mcuType: string): void {
 	}
 }
 
+// .wvproj 中保存的接口模式值，2-wire 需要 OpenOCD 在 init 前切换。
+export const TWO_WIRE_DEBUG_INTERFACE_MODE = "2-wires serial";
+
+// 避免与工程里已有的 OpenOCD 配置重复，例如 configOptions 中已经写了 init。
+export function appendOpenOcdCommandArg(args: string[], command: string): void {
+	if (!hasOpenOcdCommandArg(args, command)) {
+		args.push('-c', command);
+	}
+}
+
+export function hasOpenOcdCommandArg(args: string[], command: string): boolean {
+	const normalizedCommand = command.toLowerCase();
+	for (let index = 0; index < args.length - 1; index += 1) {
+		if (args[index] !== '-c') {
+			continue;
+		}
+		const value = args[index + 1].trim().toLowerCase();
+		if (value === normalizedCommand || value.startsWith(`${normalizedCommand} `)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export function normalizeOpenOcdChipId(mcuType: string): string {
 	const normalizedMcuType = normalizeMounRiverArgument(mcuType);
 	switch (normalizedMcuType.toUpperCase()) {

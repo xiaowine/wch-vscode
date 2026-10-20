@@ -4,8 +4,10 @@ import type { ResolvedBuildProject } from "../build/buildProjectResolver";
 import { resolveProjectFileSystemPath } from "../build/buildProjectResolver";
 import {
   appendOpenOcdChipIdArgs,
+  appendOpenOcdCommandArg,
   getConfiguredMounRiverStudioPath,
   resolveOpenOcdPaths,
+  TWO_WIRE_DEBUG_INTERFACE_MODE,
   type ResolvedOpenOcdPaths,
 } from "../build/buildShared";
 import { t } from "../i18n";
@@ -87,23 +89,35 @@ export function buildOpenOcdServerArgs(
   project: ResolvedBuildProject,
   openOcdPaths: ResolvedOpenOcdPaths,
 ): string[] {
-  const args = project.model.debug.openOcdConfigOptions.length > 0
-    ? [...project.model.debug.openOcdConfigOptions]
-    : ["-f", openOcdPaths.config];
-
-  appendOpenOcdChipIdArgs(args, project.model.flash.mcuType);
-
   const gdbPort = project.model.debug.gdbPort || 3333;
   const telnetPort = project.model.debug.telnetPort || 4444;
   const tclPort = project.model.debug.tclPort || 6666;
-  args.push(
-    "-c",
-    `gdb_port ${gdbPort}`,
-    "-c",
-    `telnet_port ${telnetPort}`,
-    "-c",
-    `tcl_port ${tclPort}`,
-  );
+
+  // 单核 RISC-V：固定使用 wch-riscv.cfg，端口和脚本目录需在 init 之前设置。
+  const args: string[] = [
+    "-c", `gdb_port ${gdbPort}`,
+    "-c", `telnet_port ${telnetPort}`,
+    "-c", `tcl_port ${tclPort}`,
+    "-s", path.dirname(openOcdPaths.executable),
+  ];
+
+  const configOptions = project.model.debug.openOcdConfigOptions;
+  if (configOptions.length > 0) {
+    args.push(...configOptions);
+  } else {
+    args.push("-f", openOcdPaths.config);
+  }
+
+  appendOpenOcdChipIdArgs(args, project.model.flash.mcuType);
+  appendOpenOcdCommandArg(args, "dbgtool");
+
+  // 2-wire 必须在 init 之前执行，否则 OpenOCD 会直接报错。
+  if (project.model.flash.debugInterfaceMode === TWO_WIRE_DEBUG_INTERFACE_MODE) {
+    appendOpenOcdCommandArg(args, "two_wires");
+  }
+
+  appendOpenOcdCommandArg(args, "init");
+  appendOpenOcdCommandArg(args, "halt");
   return args;
 }
 

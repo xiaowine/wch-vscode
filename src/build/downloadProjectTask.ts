@@ -2,8 +2,10 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import {
   appendOpenOcdChipIdArgs,
+  appendOpenOcdCommandArg,
   getConfiguredMounRiverStudioPath,
   resolveOpenOcdPaths,
+  TWO_WIRE_DEBUG_INTERFACE_MODE,
 } from "./buildShared";
 import type { ResolvedBuildProject } from "./buildProjectResolver";
 import {
@@ -136,14 +138,15 @@ export function buildOpenOcdDownloadArgs(
 ): string[] {
   const args = ["-f", configPath];
   appendOpenOcdChipIdArgs(args, project.model.flash.mcuType);
-  args.push(
-    "-c",
-    "init",
-    "-c",
-    "halt",
-    "-c",
-    buildOpenOcdProgramCommand(project, downloadTargetPath),
-  );
+
+  // 2-wire 需要在 init 之前切换。
+  if (project.model.flash.debugInterfaceMode === TWO_WIRE_DEBUG_INTERFACE_MODE) {
+    args.push("-c", "two_wires");
+  }
+
+  appendOpenOcdCommandArg(args, "init");
+  appendOpenOcdCommandArg(args, "halt");
+  args.push("-c", buildOpenOcdProgramCommand(project, downloadTargetPath));
   return args;
 }
 

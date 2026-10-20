@@ -629,6 +629,7 @@ function buildWchProjectModel(
       program: getBoolean(flashConfig?.program) ?? false,
       verify: getBoolean(flashConfig?.verify) ?? false,
       reset: getBoolean(flashConfig?.reset) ?? false,
+      debugInterfaceMode: getString(flashConfig?.debug_interface_mode)?.trim() ?? "",
     },
   };
 }

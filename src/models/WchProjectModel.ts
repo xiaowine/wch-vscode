@@ -161,6 +161,7 @@ export type WchFlashModel = {
 	program: boolean;
 	verify: boolean;
 	reset: boolean;
+	debugInterfaceMode: string;
 };
 
 export type WchProjectModel = {

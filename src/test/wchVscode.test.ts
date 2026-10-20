@@ -30,10 +30,12 @@ import {
   buildOpenOcdServerArgs,
   resolveConfiguredOpenOcdExecutable,
 } from "../debug/debugConfig";
+import { decodeGdbPath, resolveGdbBreakpointFile, resolveGdbFilePath } from "../debug/gdbPath";
 import { getList, getString, getTuple, parseMiLine } from "../debug/miParser";
 import { refreshWchProjectState } from "../projectDetection";
 import { buildWchProjectModels } from "../projectModelBuilder";
 import { getWchProjectState, type ParsedWchProject } from "../projectState";
+import { MounRiverLineColorizer, MounRiverOutputFilter } from "../build/mrsCliOutput";
 suite("wch-vscode Test Suite", () => {
   vscode.window.showInformationMessage("Start wch-vscode tests.");
 
@@ -276,6 +278,20 @@ suite("wch-vscode Test Suite", () => {
     );
   });
 
+  test("download openocd args enable two-wire before init", () => {
+    const project = createResolvedBuildProject();
+    project.model.flash.mcuType = "CH32V003";
+    project.model.flash.debugInterfaceMode = "2-wires serial";
+
+    const args = buildOpenOcdDownloadArgs(
+      project,
+      "F:\\MounRiver\\OpenOCD\\bin\\wch-riscv.cfg",
+      "C:\\workspace\\DemoProject\\obj\\DemoProject.hex",
+    );
+    assert.strictEqual(args.filter((arg) => arg === "two_wires").length, 1);
+    assert.ok(args.indexOf("two_wires") < args.indexOf("init"));
+  });
+
   test("OpenOCD chip id normalization matches MRS aliases", () => {
     assert.strictEqual(normalizeOpenOcdChipId("CH59x"), "CH59x");
     assert.strictEqual(normalizeOpenOcdChipId("CH32V00x"), "CH32V003");
@@ -444,6 +460,14 @@ suite("wch-vscode Test Suite", () => {
     project.model.flash.mcuType = "CH59x";
 
     assert.deepStrictEqual(buildOpenOcdServerArgs(project, openOcdPaths), [
+      "-c",
+      "gdb_port 3334",
+      "-c",
+      "telnet_port 4445",
+      "-c",
+      "tcl_port 6667",
+      "-s",
+      path.dirname(openOcdPaths.executable),
       "-f",
       "interface/wch-link.cfg",
       "-f",
@@ -451,11 +475,11 @@ suite("wch-vscode Test Suite", () => {
       "-c",
       "chip_id CH59x",
       "-c",
-      "gdb_port 3334",
+      "dbgtool",
       "-c",
-      "telnet_port 4445",
+      "init",
       "-c",
-      "tcl_port 6667",
+      "halt",
     ]);
   });
 
@@ -486,15 +510,51 @@ suite("wch-vscode Test Suite", () => {
     project.model.debug.openOcdConfigOptions = [];
 
     assert.deepStrictEqual(buildOpenOcdServerArgs(project, openOcdPaths), [
-      "-f",
-      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
       "-c",
       "gdb_port 3333",
       "-c",
       "telnet_port 4444",
       "-c",
       "tcl_port 6666",
+      "-s",
+      path.dirname(openOcdPaths.executable),
+      "-f",
+      "F:\\MounRiver\\MounRiver_Studio2\\resources\\app\\resources\\win32\\components\\WCH\\OpenOCD\\OpenOCD\\bin\\wch-riscv.cfg",
+      "-c",
+      "dbgtool",
+      "-c",
+      "init",
+      "-c",
+      "halt",
     ]);
+  });
+
+  test("debug openocd args enable two-wire before init", () => {
+    const project = createResolvedBuildProject();
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
+    assert.ok(openOcdPaths);
+    project.model.flash.mcuType = "CH32V003";
+    project.model.flash.debugInterfaceMode = "2-wires serial";
+
+    const args = buildOpenOcdServerArgs(project, openOcdPaths);
+    assert.ok(args.includes("dbgtool"));
+    assert.strictEqual(args.filter((arg) => arg === "two_wires").length, 1);
+    assert.ok(args.indexOf("two_wires") < args.indexOf("init"));
+    assert.ok(args.indexOf("dbgtool") < args.indexOf("init"));
+  });
+
+  test("wvproj debug interface mode is preserved", () => {
+    const [model] = buildWchProjectModels(
+      createParsedProject({
+        flashConfig: {
+          debug_interface_mode: "2-wires serial",
+        },
+      }),
+    );
+
+    assert.strictEqual(model.flash.debugInterfaceMode, "2-wires serial");
   });
 
   test("MRS openocd values resolve WCH variable from component root", () => {
@@ -678,6 +738,106 @@ suite("wch-vscode Test Suite", () => {
       await fs.rm(mrs3Root, { recursive: true, force: true });
       await fs.rm(mrs2Root, { recursive: true, force: true });
     }
+  });
+
+  test("MRS output filter drops Electron startup noise", () => {
+    const filter = new MounRiverOutputFilter();
+    const noisyOutput = [
+      "[10244:1021/000438.517:ERROR:jump_list.cc(301)] Failed to append custom category.",
+      "undefined",
+      "{",
+      "  VSCODE_IPC_HOOK: '\\\\\\\\.\\\\pipe\\\\x',",
+      "  VSCODE_NLS_CONFIG: '{}'",
+      "}",
+      "[main 2026-10-20T16:04:38.527Z] ",
+      "make -j24 all",
+      "[00:01:20] 编译完成 (耗时558ms)",
+      "",
+    ].join("\r\n");
+
+    let filtered = "";
+    for (const chunk of noisyOutput.match(/.{1,7}/gs) ?? []) {
+      filtered += filter.push(chunk);
+    }
+    filtered += filter.flush();
+
+    assert.ok(!filtered.includes("jump_list"));
+    assert.ok(!filtered.includes("VSCODE_IPC_HOOK"));
+    assert.ok(!filtered.includes("undefined"));
+    assert.ok(!filtered.includes("[main "));
+    assert.ok(filtered.includes("make -j24 all"));
+    assert.ok(filtered.includes("编译完成"));
+  });
+
+  test("MRS log colorizer colors diagnostics and status", () => {
+    const colorizer = new MounRiverLineColorizer();
+    const input = [
+      "d:/work/main.c:3:5: error: boom",
+      "    3 | int x = ;",
+      "      |     ^",
+      "d:/work/main.c:9:1: warning: unused",
+      "d:/work/main.c:10:1: note: see here",
+      "make: *** [makefile:1: all] Error 2",
+      "[00:00:01] 编译失败",
+      "[00:00:02] 失败",
+      "[00:00:03] 成功",
+      "[00:00:04] 已取消",
+      "",
+    ].join("\n");
+
+    const colored = colorizer.push(input);
+
+    // 整行着色，包含文件路径。
+    assert.ok(colored.startsWith("\x1b[1;31md:/work/main.c:3:5: error: boom\x1b[0m"));
+    assert.ok(colored.includes("\x1b[33md:/work/main.c:9:1: warning: unused\x1b[0m"));
+    assert.ok(colored.includes("\x1b[34md:/work/main.c:10:1: note: see here\x1b[0m"));
+    assert.ok(colored.includes("\x1b[31m      |     ^\x1b[0m"));
+    assert.ok(/\x1b\[31mmake: \*\*\*/.test(colored));
+    assert.ok(/\x1b\[31m\[00:00:01\] 编译失败/.test(colored));
+    assert.ok(/\x1b\[31m\[00:00:02\] 失败/.test(colored));
+    assert.ok(/\x1b\[32m\[00:00:03\] 成功/.test(colored));
+    assert.ok(/\x1b\[33m\[00:00:04\] 已取消/.test(colored));
+  });
+
+  test("GDB file path is resolved relative to its working directory", () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    assert.strictEqual(
+      resolveGdbFilePath("C:\\proj", "C:\\proj\\obj\\a.elf"),
+      "obj\\a.elf",
+    );
+    assert.strictEqual(
+      resolveGdbFilePath("C:\\proj", "D:\\other\\a.elf"),
+      "D:\\other\\a.elf",
+    );
+    assert.strictEqual(
+      resolveGdbFilePath("", "C:\\proj\\a.elf"),
+      "C:\\proj\\a.elf",
+    );
+  });
+
+  test("GDB paths decode octal escapes and resolve breakpoints", () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    const parsed = parseMiLine('^error,msg="\\326\\320\\316\\304.c"');
+    assert.strictEqual(parsed.kind, "result");
+    if (parsed.kind === "result") {
+      assert.strictEqual(getString(parsed.results.msg), "\u00d6\u00d0\u00ce\u00c4.c");
+    }
+
+    assert.strictEqual(decodeGdbPath("\u00d6\u00d0\u00ce\u00c4"), "中文");
+    assert.strictEqual(
+      resolveGdbBreakpointFile("C:\\proj", "C:\\proj\\User\\main.c"),
+      "User\\main.c",
+    );
+    assert.strictEqual(
+      resolveGdbBreakpointFile("C:\\proj", "C:\\proj\\中文\\SRC\\Core\\main.c"),
+      "main.c",
+    );
   });
 });
 
@@ -993,6 +1153,7 @@ function createModel(): WchProjectModel {
       program: false,
       verify: false,
       reset: false,
+      debugInterfaceMode: "",
     },
   };
 }
