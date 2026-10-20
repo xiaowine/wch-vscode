@@ -647,7 +647,7 @@ suite("wch-vscode Test Suite", () => {
     }
   });
 
-  test("MRS2 executable is resolved relative to install root", () => {
+  test("MRS executable is resolved relative to install root", () => {
     assert.strictEqual(
       resolveMounRiverStudioExecutable("F:\\MounRiver\\MounRiver_Studio2"),
       "F:\\MounRiver\\MounRiver_Studio2\\MounRiver Studio 2.exe",

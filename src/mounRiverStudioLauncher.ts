@@ -92,7 +92,7 @@ function launchMounRiverStudio(executablePath: string, wvprojPath: string): Prom
     stdio: "ignore",
     windowsHide: false,
   });
-  // 进程能创建不代表 MRS2 真的启动；继承错误环境变量时它会立刻退出。
+  // 进程能创建不代表 MRS 真的启动；继承错误环境变量时它会立刻退出。
   const timer = setTimeout(() => {
     child.unref();
     resolve();

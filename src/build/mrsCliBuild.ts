@@ -13,8 +13,8 @@ import {
 } from "./mrsCliOutput";
 import { t } from "../i18n";
 
-// mrs-cli 模式由 MRS2 自行解析工程参数并构建，与在 MRS2 内编译一致。
-// MRS2 退出码恒为 0，因此只能解析日志中的成败标记。
+// mrs-cli 模式由 MRS 自行解析工程参数并构建，与在 MRS 内编译一致。
+// MRS 退出码恒为 0，因此只能解析日志中的成败标记。
 export type MounRiverSilentOutcomeReason =
     | "succeeded"
     | "failed"

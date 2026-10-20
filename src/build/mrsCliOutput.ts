@@ -2,7 +2,7 @@ export type MounRiverSilentAction = "build" | "rebuild" | "clean";
 
 export type MounRiverSilentParseResult = "succeeded" | "failed" | "no-result";
 
-// MRS2 的日志文本是唯一可靠的成败信号，退出码恒为 0。
+// MRS 的日志文本是唯一可靠的成败信号，退出码恒为 0。
 const SUCCESS_MARKERS = ["编译完成", "Build Finished."];
 const FAILURE_MARKERS = ["编译失败", "Build Failed."];
 

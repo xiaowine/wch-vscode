@@ -13,7 +13,7 @@ export const OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND =
 export const OPEN_BUILD_METHOD_SETTING_COMMAND =
     "wchVscode.openBuildMethodSetting";
 
-// 设置与工具视图：集中放置设置入口和 MRS2 打开动作。
+// 设置与工具视图：集中放置设置入口和 MRS 打开动作。
 export class WchToolsSidebarProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
     private readonly _onDidChangeTreeData = new vscode.EventEmitter<
         vscode.TreeItem | undefined | void

@@ -149,7 +149,7 @@ async function runResolvedProjectBuild(
   cleanOutputDirectory = false,
   waitForExit = false,
 ): Promise<BuildRunResult> {
-  // mrs-cli 交给 MRS2 解析工程参数并构建，与在 MRS2 内编译一致。
+  // mrs-cli 交给 MRS 解析工程参数并构建，与在 MRS 内编译一致。
   if (getBuildMethod() === "mrs-cli") {
     const outcome = await runMounRiverSilentBuild(
       project,
