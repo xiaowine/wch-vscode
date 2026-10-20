@@ -102,7 +102,7 @@ export class WchProjectFilesProvider
       item.children = this.buildValidationErrorItems(result);
     } else if (result.isTargetProject) {
       item.loadChildren = async () =>
-        this.loadWorkspaceProjectItems(result.folder.uri.fsPath, models);
+        models.map((model) => this.createProjectRootItem(model));
     }
 
     return item;
@@ -146,17 +146,8 @@ export class WchProjectFilesProvider
     return item;
   }
 
-  // 同一工作区下可能有多个匹配项目，按项目名拆分顶层节点。
-  private async loadWorkspaceProjectItems(
-    folderPath: string,
-    models: WchProjectModel[],
-  ): Promise<FileTreeItem[]> {
-    return models.map((model) => this.createProjectRootItem(folderPath, model));
-  }
-
   // 单个项目的文件树顶层同时展示 linkedFolders 和本地目录。
   private createProjectRootItem(
-    folderPath: string,
     model: WchProjectModel,
   ): FileTreeItem {
     const item = new FileTreeItem(
@@ -165,23 +156,22 @@ export class WchProjectFilesProvider
     );
     item.description = model.target.mcu || model.identity.baseName;
     item.iconPath = new vscode.ThemeIcon("project");
-    item.loadChildren = async () => this.loadProjectFileTree(folderPath, model);
+    item.loadChildren = async () => this.loadProjectFileTree(model);
     return item;
   }
 
   // 文件树顶层同时展示映射目录和本地目录。
   private async loadProjectFileTree(
-    folderPath: string,
     model: WchProjectModel,
   ): Promise<FileTreeItem[]> {
     // 同名映射目录会覆盖本地目录展示，避免顶层出现两个同名节点。
     const linkedFolderNames = new Set(model.target.linkedFolders.map((item) => item.name));
     const localItems = await this.readDirectoryItems(
-      vscode.Uri.file(folderPath),
+      vscode.Uri.file(model.identity.folderPath),
       linkedFolderNames,
     );
     const linkedFolderItems = model.target.linkedFolders.map((item) =>
-      this.createLinkedFolderItem(folderPath, item),
+      this.createLinkedFolderItem(model.identity.folderPath, item),
     );
 
     return [...linkedFolderItems, ...localItems].sort((left, right) =>

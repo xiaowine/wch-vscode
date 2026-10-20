@@ -168,6 +168,38 @@ suite("wch-vscode Test Suite", () => {
     );
   });
 
+  test("build resolver uses the wvproj directory for nested projects", () => {
+    const workspacePath = "C:\\workspace\\中文\\ADC";
+    const projectPath = path.join(workspacePath, "ADC_DMA");
+    const parsedProject = createParsedProject({});
+    parsedProject.folderPath = workspacePath;
+    parsedProject.projectPairs[0].wvproj.filePath = path.join(
+      projectPath,
+      "ADC_DMA.wvproj",
+    );
+    const wvprojData = parsedProject.projectPairs[0].wvproj.data as {
+      basic: { linkedFolders: unknown };
+    };
+    wvprojData.basic.linkedFolders = [
+      { name: "Ld", location: "../../SRC/Ld" },
+    ];
+
+    const models = buildWchProjectModels(parsedProject);
+    assert.strictEqual(models.length, 1);
+
+    const model = models[0];
+    const linkerScriptPath = resolveProjectFileSystemPath(
+      model,
+      "${project}/Ld/Link.ld",
+    );
+    assert.strictEqual(model.identity.folderPath, projectPath);
+    assert.strictEqual(
+      linkerScriptPath,
+      path.resolve(projectPath, "../../SRC/Ld", "Link.ld"),
+    );
+    assert.strictEqual(toLogicalProjectPath(model, linkerScriptPath), "Ld/Link.ld");
+  });
+
   test("build resolver maps MRS build-directory relative paths", () => {
     const model = createModel();
     model.build.configName = "Debug";

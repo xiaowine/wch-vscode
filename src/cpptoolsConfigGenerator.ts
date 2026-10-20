@@ -1,6 +1,7 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { WchProjectModel } from './models/WchProjectModel';
-import { isAbsoluteOrVariablePath, mapProjectVirtualPath, normalizeLinkedFolderLocation, resolveCompilerPathFromSetting } from './build/buildShared';
+import { isAbsoluteOrVariablePath, resolveCompilerPathFromSetting } from './build/buildShared';
 
 export const GENERATE_CPPTOOLS_CONFIG_COMMAND = 'wchVscode.generateCppToolsConfig';
 const CPPTOOLS_CONFIG_FILE_NAME = 'c_cpp_properties.json';
@@ -58,10 +59,11 @@ export async function ensureCppToolsConfigFileIfMissing(
 
 // 生成单个项目对应的 cpptools 配置。
 async function buildCppToolsConfiguration(model: WchProjectModel): Promise<CppToolsConfiguration> {
-	const linkedFolderPaths = model.target.linkedFolders.map((value) => normalizeLinkedFolderLocation(value.location));
+	const projectPrefix = toWorkspacePath(model, model.identity.folderPath);
+	const linkedFolderPaths = model.target.linkedFolders.map((value) => resolveLinkedFolderPath(model, value.location));
 	const linkedFolderBrowsePaths = linkedFolderPaths.map((value) => appendRecursiveGlob(value));
 	const includePath = uniqueStrings([
-		'${workspaceFolder}/**',
+		`${projectPrefix}/**`,
 		...model.build.includePaths.map((value) => normalizeWorkspacePath(model, value)),
 		...model.build.includeSystemPaths.map((value) => normalizeWorkspacePath(model, value)),
 		...linkedFolderBrowsePaths,
@@ -85,7 +87,7 @@ async function buildCppToolsConfiguration(model: WchProjectModel): Promise<CppTo
 		defines: uniqueStrings(model.build.definedSymbols),
 		forcedInclude: forcedInclude.length > 0 ? forcedInclude : undefined,
 		browse: {
-			path: uniqueStrings(['${workspaceFolder}', ...includePath, ...linkedFolderPaths]),
+			path: uniqueStrings([projectPrefix, ...includePath, ...linkedFolderPaths]),
 			limitSymbolsToIncludedHeaders: true,
 		},
 	};
@@ -93,23 +95,80 @@ async function buildCppToolsConfiguration(model: WchProjectModel): Promise<CppTo
 
 // 将项目变量路径转成 cpptools 能直接识别的 workspace 路径。
 function normalizeWorkspacePath(model: WchProjectModel, value: string): string {
+	const projectPrefix = toWorkspacePath(model, model.identity.folderPath);
 	const normalizedValue = value
 		.replace(/\\/g, '/')
-		.replace(/\$\{workspace_loc:\/\$\{ProjName\}/g, '${workspaceFolder}');
+		.replace(/\$\{workspace_loc:\/\$\{ProjName\}/g, projectPrefix);
 
-	const mappedProjectPath = mapProjectVirtualPath(model.target.linkedFolders, normalizedValue);
+	const mappedProjectPath = mapProjectLinkedFolderPath(model, normalizedValue);
 	if (mappedProjectPath) {
 		return mappedProjectPath;
 	}
 
-	const replacedProjectName = normalizedValue.replace(/\$\{ProjName\}/g, model.identity.folderName);
-	const replacedProjectPath = replacedProjectName.replace(/\$\{project\}/g, '${workspaceFolder}');
+	const replacedProjectName = normalizedValue.replace(/\$\{ProjName\}/g, model.identity.name || model.identity.baseName);
+	const replacedProjectPath = replacedProjectName.replace(/\$\{project\}/g, projectPrefix);
 
 	if (isAbsoluteOrVariablePath(replacedProjectPath)) {
 		return replacedProjectPath;
 	}
 
-	return `\${workspaceFolder}/${replacedProjectPath.replace(/^\/+/g, '')}`;
+	return `${projectPrefix}/${replacedProjectPath.replace(/^\/+/g, '')}`;
+}
+
+// linkedFolders 的 location 以工程目录为基准，需要按 ${project} 虚拟路径映射。
+function mapProjectLinkedFolderPath(model: WchProjectModel, value: string): string | null {
+	if (!value.startsWith('${project}/')) {
+		return null;
+	}
+
+	const relativePath = value.slice('${project}/'.length);
+	for (const linkedFolder of model.target.linkedFolders) {
+		const folderName = linkedFolder.name.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+		if (!folderName) {
+			continue;
+		}
+
+		if (relativePath === folderName || relativePath.startsWith(`${folderName}/`)) {
+			const suffix = relativePath.slice(folderName.length).replace(/^\/+/g, '');
+			const basePath = resolveLinkedFolderPath(model, linkedFolder.location).replace(/\/+$/g, '');
+			return suffix ? `${basePath}/${suffix}` : basePath;
+		}
+	}
+
+	return null;
+}
+
+function resolveLinkedFolderPath(model: WchProjectModel, location: string): string {
+	const trimmedLocation = location.trim();
+	if (trimmedLocation.startsWith('${')) {
+		return normalizeWorkspacePath(model, trimmedLocation);
+	}
+
+	return toWorkspacePath(
+		model,
+		path.isAbsolute(trimmedLocation)
+			? path.normalize(trimmedLocation)
+			: path.resolve(model.identity.folderPath, trimmedLocation),
+	);
+}
+
+// 工程可能位于工作区子目录，cpptools 的 ${workspaceFolder} 需要补上工程相对路径。
+function toWorkspacePath(model: WchProjectModel, fileSystemPath: string): string {
+	const workspaceFolder = vscode.workspace.getWorkspaceFolder(
+		vscode.Uri.file(model.identity.folderPath),
+	);
+	if (workspaceFolder) {
+		const relativePath = path.relative(workspaceFolder.uri.fsPath, fileSystemPath)
+			.replace(/\\/g, '/');
+		if (relativePath === '') {
+			return '${workspaceFolder}';
+		}
+		if (!relativePath.startsWith('..') && !path.isAbsolute(relativePath)) {
+			return `\${workspaceFolder}/${relativePath}`;
+		}
+	}
+
+	return fileSystemPath.replace(/\\/g, '/');
 }
 
 // 为目录补齐递归通配，便于 cpptools 处理 linkedFolders 里的子目录头文件。

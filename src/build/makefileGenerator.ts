@@ -1,6 +1,5 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { WchProjectModel } from '../models/WchProjectModel';
 import type { ResolvedBuildProject, ResolvedSourceFile } from './buildProjectResolver';
 import { buildMarch } from './buildShared';
 import { resolveProjectFileSystemPath } from './buildProjectResolver';
@@ -24,7 +23,7 @@ export async function generateBuildFiles(project: ResolvedBuildProject): Promise
 		await writeBuildFile(
 			project.outputDirectory,
 			sourceGroup.subdirMakefilePath,
-			buildSubdirMk(project.model, sourceGroup.sources),
+			buildSubdirMk(project, sourceGroup.sources),
 		);
 	}
 }
@@ -34,18 +33,18 @@ function buildMakefile(
 	subdirGroups: Map<string, { subdirMakefilePath: string; sources: ResolvedSourceFile[] }>,
 ): string {
 	const mapFlag = project.mapFilePath
-		? [`-Wl,-Map="${toToolPath(project.mapFilePath)}"`]
+		? [`-Wl,-Map="${toBuildPath(project, project.mapFilePath)}"`]
 		: [];
 	const linkerFlags = joinArgs([
 		...project.model.build.linker.args,
-		`-T"${toToolPath(project.linkerScriptPath)}"`,
+		`-T"${toBuildPath(project, project.linkerScriptPath)}"`,
 		...project.model.build.linker.librarySearchPaths.map((value) =>
-			`-L"${toToolPath(resolveProjectFileSystemPath(project.model, value))}"`,
+			`-L"${toBuildPath(project, resolveProjectFileSystemPath(project.model, value))}"`,
 		),
 		...mapFlag,
 	]);
 	const libraries = joinArgs(project.model.build.linker.libraries.map((library) => `-l${library}`));
-	const otherObjects = joinArgs(project.otherObjects.map((value) => `"${toToolPath(value)}"`));
+	const otherObjects = joinArgs(project.otherObjects.map((value) => `"${toBuildPath(project, value)}"`));
 	const flashFlags = joinArgs(project.model.build.postBuild.flashArgs);
 	const listFlags = joinArgs(project.model.build.postBuild.listArgs);
 	const sizeFlags = joinArgs(project.model.build.postBuild.sizeArgs);
@@ -60,8 +59,8 @@ function buildMakefile(
 		project.model.build.postBuild.printSize ? 'size-report' : '',
 	].filter((value) => value.length > 0);
 	const buildTargets = allTargets.join(' ');
-	const preBuildCommand = resolveBuildHookCommand(project.model, project.model.build.preScript);
-	const postBuildCommand = resolveBuildHookCommand(project.model, project.model.build.postScript);
+	const preBuildCommand = resolveBuildHookCommand(project, project.model.build.preScript);
+	const postBuildCommand = resolveBuildHookCommand(project, project.model.build.postScript);
 	const cleanCommands = buildCleanCommands(project);
 
 	return [
@@ -69,11 +68,11 @@ function buildMakefile(
 		'.DELETE_ON_ERROR:',
 		'.PHONY: all build-main pre-build post-build clean size-report',
 		'',
-		`CC := ${toToolPath(project.toolchainPaths.gcc)}`,
-		`CXX := ${toToolPath(project.toolchainPaths.gpp)}`,
-		`OBJCOPY := ${toToolPath(project.toolchainPaths.objcopy)}`,
-		`OBJDUMP := ${toToolPath(project.toolchainPaths.objdump)}`,
-		`SIZE := ${toToolPath(project.toolchainPaths.size)}`,
+		`CC := ${toBuildPath(project, project.toolchainPaths.gcc)}`,
+		`CXX := ${toBuildPath(project, project.toolchainPaths.gpp)}`,
+		`OBJCOPY := ${toBuildPath(project, project.toolchainPaths.objcopy)}`,
+		`OBJDUMP := ${toBuildPath(project, project.toolchainPaths.objdump)}`,
+		`SIZE := ${toBuildPath(project, project.toolchainPaths.size)}`,
 		`LD := ${project.hasCppSources ? '$(CXX)' : '$(CC)'}`,
 		`ELF := ${path.basename(project.elfPath)}`,
 		`HEX := ${path.basename(project.hexPath)}`,
@@ -161,13 +160,13 @@ function buildSourcesMk(
 ): string {
 	const cSources = project.sources
 		.filter((source) => source.language === 'c')
-		.map((source) => escapeMakePath(toToolPath(source.sourcePath)));
+		.map((source) => escapeMakePath(toBuildPath(project, source.sourcePath)));
 	const cppSources = project.sources
 		.filter((source) => source.language === 'cpp')
-		.map((source) => escapeMakePath(toToolPath(source.sourcePath)));
+		.map((source) => escapeMakePath(toBuildPath(project, source.sourcePath)));
 	const asmSources = project.sources
 		.filter((source) => source.language === 'asm')
-		.map((source) => escapeMakePath(toToolPath(source.sourcePath)));
+		.map((source) => escapeMakePath(toBuildPath(project, source.sourcePath)));
 	const subdirectories = Array.from(subdirGroups.keys()).sort((left, right) => left.localeCompare(right, 'en'));
 
 	return [
@@ -189,30 +188,31 @@ function buildObjectsMk(project: ResolvedBuildProject): string {
 	].join('\n');
 }
 
-function buildSubdirMk(model: WchProjectModel, sources: ResolvedSourceFile[]): string {
+function buildSubdirMk(project: ResolvedBuildProject, sources: ResolvedSourceFile[]): string {
 	return [
-		...sources.map((source) => buildSourceRule(model, source)),
+		...sources.map((source) => buildSourceRule(project, source)),
 		'',
 	].join('\n');
 }
 
-function buildSourceRule(model: WchProjectModel, source: ResolvedSourceFile): string {
-	const sourcePath = escapeMakePath(toToolPath(source.sourcePath));
+function buildSourceRule(project: ResolvedBuildProject, source: ResolvedSourceFile): string {
+	const sourcePath = escapeMakePath(toBuildPath(project, source.sourcePath));
 	const objectPath = escapeMakePath(source.objectPath);
 	const dependencyPath = toToolPath(source.dependencyPath);
 	const compileTool = source.language === 'cpp' ? '$(CXX)' : '$(CC)';
-	const compileFlags = joinArgs(buildCompileArgs(model, source.language));
+	const compileFlags = joinArgs(buildCompileArgs(project, source.language));
 
 	return [
 		`${objectPath}: ${sourcePath}`,
 		`\t@echo Building file: ${source.logicalPath}`,
-		`\t"${compileTool}" ${compileFlags} -MMD -MP -MF"${dependencyPath}" -MT"${toToolPath(source.objectPath)}" -c -o "${toToolPath(source.objectPath)}" "${toToolPath(source.sourcePath)}"`,
+		`\t"${compileTool}" ${compileFlags} -MMD -MP -MF"${dependencyPath}" -MT"${toToolPath(source.objectPath)}" -c -o "${toToolPath(source.objectPath)}" "${toBuildPath(project, source.sourcePath)}"`,
 		`\t@echo Finished building: ${source.logicalPath}`,
 		'',
 	].join('\n');
 }
 
-function buildCompileArgs(model: WchProjectModel, language: ResolvedSourceFile['language']): string[] {
+function buildCompileArgs(project: ResolvedBuildProject, language: ResolvedSourceFile['language']): string[] {
+	const model = project.model;
 	if (language === 'asm') {
 		const commonIncludePaths = uniqueStrings([...model.build.includePaths, ...model.build.compile.assembler.includePaths]);
 		const commonSystemIncludePaths = uniqueStrings([
@@ -224,8 +224,8 @@ function buildCompileArgs(model: WchProjectModel, language: ResolvedSourceFile['
 
 		return uniqueStrings([
 			...model.build.compile.assembler.args,
-			...buildIncludeArgs(model, commonIncludePaths, commonSystemIncludePaths),
-			...buildForcedIncludeArgs(model, commonIncludeFiles),
+			...buildIncludeArgs(project, commonIncludePaths, commonSystemIncludePaths),
+			...buildForcedIncludeArgs(project, commonIncludeFiles),
 			...buildDefineArgs(commonDefines),
 		]);
 	}
@@ -241,27 +241,27 @@ function buildCompileArgs(model: WchProjectModel, language: ResolvedSourceFile['
 
 	return uniqueStrings([
 		...compiler.args,
-		...buildIncludeArgs(model, commonIncludePaths, commonSystemIncludePaths),
-		...buildForcedIncludeArgs(model, commonIncludeFiles),
+		...buildIncludeArgs(project, commonIncludePaths, commonSystemIncludePaths),
+		...buildForcedIncludeArgs(project, commonIncludeFiles),
 		...buildDefineArgs(commonDefines),
 	]);
 }
 
-function buildIncludeArgs(model: WchProjectModel, includePaths: string[], includeSystemPaths: string[]): string[] {
+function buildIncludeArgs(project: ResolvedBuildProject, includePaths: string[], includeSystemPaths: string[]): string[] {
 	return [
 		...uniqueStrings(includePaths).map((value) =>
-			`-I"${toToolPath(resolveProjectFileSystemPath(model, value))}"`,
+			`-I"${toBuildPath(project, resolveProjectFileSystemPath(project.model, value))}"`,
 		),
 		...uniqueStrings(includeSystemPaths).map((value) =>
-			`-isystem "${toToolPath(resolveProjectFileSystemPath(model, value))}"`,
+			`-isystem "${toBuildPath(project, resolveProjectFileSystemPath(project.model, value))}"`,
 		),
 	];
 }
 
-function buildForcedIncludeArgs(model: WchProjectModel, includeFiles: string[]): string[] {
+function buildForcedIncludeArgs(project: ResolvedBuildProject, includeFiles: string[]): string[] {
 	return uniqueStrings(includeFiles).flatMap((value) => [
 		'-include',
-		`"${toToolPath(resolveProjectFileSystemPath(model, value))}"`,
+		`"${toBuildPath(project, resolveProjectFileSystemPath(project.model, value))}"`,
 	]);
 }
 
@@ -317,35 +317,58 @@ function buildCleanCommands(project: ResolvedBuildProject): string[] {
 		project.mapFilePath ? path.basename(project.mapFilePath) : '',
 	]);
 	const generatedDirectories = uniqueStrings(project.sources
-		.flatMap((source) => [
-			path.dirname(source.objectPath),
-			path.dirname(source.dependencyPath),
-			path.dirname(source.subdirMakefilePath),
-		])
-		.filter((value) => value && value !== '.'))
+		.flatMap((source) => {
+			const directories: string[] = [];
+			for (const filePath of [source.objectPath, source.dependencyPath, source.subdirMakefilePath]) {
+				let directory = path.dirname(filePath);
+				while (directory && directory !== '.' && directory !== path.sep) {
+					directories.push(directory);
+					directory = path.dirname(directory);
+				}
+			}
+			return directories;
+		}))
 		.sort((left, right) => right.localeCompare(left, 'en'));
 
 	return [
-		...generatedFiles.map((value) => `\t@if exist "${toToolPath(value)}" del /f /q "${toToolPath(value)}"`),
-		...generatedDirectories.map((value) => `\t@if exist "${toToolPath(value)}" rmdir /s /q "${toToolPath(value)}"`),
+		...generatedFiles.map((value) => `\t@if exist "${toCmdPath(value)}" del /f /q "${toCmdPath(value)}"`),
+		...generatedDirectories.map((value) => `\t@if exist "${toCmdPath(value)}" rmdir /s /q "${toCmdPath(value)}"`),
 	];
 }
 
-function resolveBuildHookCommand(model: WchProjectModel, script: string): string {
+function toCmdPath(value: string): string {
+	// cmd 的 del/rmdir 会把正斜杠解析成参数，clean 命令必须使用反斜杠。
+	return value.replace(/\//g, '\\');
+}
+
+function resolveBuildHookCommand(project: ResolvedBuildProject, script: string): string {
 	const trimmed = script.trim();
 	if (!trimmed) {
 		return '';
 	}
 
-	const replacedProjectPath = trimmed.replaceAll('${project}', toToolPath(model.identity.folderPath));
-	if (/[|&<>]/.test(replacedProjectPath) || replacedProjectPath.startsWith('"') || /\s/.test(replacedProjectPath)) {
+	const replacedProjectPath = trimmed.replaceAll('${project}', toBuildPath(project, project.model.identity.folderPath));
+	if (/[|&<>]/.test(replacedProjectPath) || replacedProjectPath.startsWith('"')) {
 		return replacedProjectPath;
 	}
 
-	const resolvedPath = path.isAbsolute(replacedProjectPath)
-		? replacedProjectPath
-		: path.resolve(model.identity.folderPath, replacedProjectPath);
-	return `"${toToolPath(resolvedPath)}"`;
+	const commandPath = path.isAbsolute(replacedProjectPath)
+		? toBuildPath(project, replacedProjectPath)
+		: replacedProjectPath.startsWith('.')
+			? replacedProjectPath
+			: toBuildPath(project, path.resolve(project.model.identity.folderPath, replacedProjectPath));
+	return `"${toToolPath(commandPath)}"`;
+}
+
+function toBuildPath(project: ResolvedBuildProject, fileSystemPath: string): string {
+	// GNU make 在 Windows 上通过 ANSI 接口访问文件，无法正确读取 UTF-8 中文路径。
+	// 构建目录与工程通常共享同一前缀，改用相对路径即可让工具链只看到 ASCII 字符。
+	const relativePath = path.relative(project.outputDirectory, fileSystemPath);
+	if (relativePath && !path.isAbsolute(relativePath) && !/[^\x20-\x7E]/.test(relativePath)) {
+		return relativePath.replace(/\\/g, '/');
+	}
+
+	return toToolPath(fileSystemPath);
 }
 
 function toToolPath(value: string): string {

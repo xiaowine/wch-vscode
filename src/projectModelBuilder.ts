@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import type {
   WchLinkedFolder,
   WchProjectModel,
@@ -283,8 +284,9 @@ function buildWchProjectModel(
     identity: {
       name: getString(basic?.projectName) ?? pair.baseName,
       baseName: pair.baseName,
-      folderPath: project.folderPath,
-      folderName: project.folderName,
+      // 工作区根目录可能包含多个工程，工程内相对路径必须以 .wvproj 所在目录为基准。
+      folderPath: path.dirname(pair.wvproj.filePath),
+      folderName: path.basename(path.dirname(pair.wvproj.filePath)),
       files: {
         cproject: project.cprojectFiles.map((file) => file.filePath),
         launch: pair.launch.filePath,

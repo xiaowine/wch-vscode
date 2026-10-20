@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { WchLinkedFolder, WchProjectModel } from '../models/WchProjectModel';
+import type { WchProjectModel } from '../models/WchProjectModel';
 
 export const MOUN_RIVER_STUDIO_PATH_SETTING = 'mounRiverStudioPath';
 
@@ -275,37 +275,6 @@ export function buildMarch(model: WchProjectModel): string {
 	const xwDirect = hasXW && !hasZExts ? 'xw' : '';
 
 	return `${base}${single}${multiSuffix}${xwDirect}`;
-}
-
-export function normalizeLinkedFolderLocation(value: string): string {
-	const normalizedValue = value.replace(/\\/g, '/');
-	if (isAbsoluteOrVariablePath(normalizedValue)) {
-		return normalizedValue;
-	}
-
-	return `\${workspaceFolder}/${normalizedValue.replace(/^\/+/g, '')}`;
-}
-
-export function mapProjectVirtualPath(linkedFolders: WchLinkedFolder[], value: string): string | null {
-	if (!value.startsWith('${project}/')) {
-		return null;
-	}
-
-	const relativePath = value.slice('${project}/'.length);
-	for (const linkedFolder of linkedFolders) {
-		const folderName = linkedFolder.name.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-		if (!folderName) {
-			continue;
-		}
-
-		if (relativePath === folderName || relativePath.startsWith(`${folderName}/`)) {
-			const suffix = relativePath.slice(folderName.length).replace(/^\/+/g, '');
-			const basePath = normalizeLinkedFolderLocation(linkedFolder.location).replace(/\/+$/g, '');
-			return suffix ? `${basePath}/${suffix}` : basePath;
-		}
-	}
-
-	return null;
 }
 
 export function isAbsoluteOrVariablePath(value: string): boolean {

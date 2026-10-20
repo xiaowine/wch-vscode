@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {
@@ -51,6 +52,15 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
   outputChannel.appendLine("wvproj exists: true");
 
   try {
+    // 中文路径下 ShellExecute/文件关联可能返回 0x2，直接启动可执行文件更可靠。
+    await launchMounRiverStudio(executablePath, wvprojPath);
+    void vscode.window.showInformationMessage(t("message.mrs2ProjectOpened"));
+    return;
+  } catch (error) {
+    outputChannel.appendLine(`direct launch failed: ${asErrorMessage(error)}`);
+  }
+
+  try {
     const projectUri = vscode.Uri.file(wvprojPath);
     outputChannel.appendLine(`openExternal target: ${projectUri.toString(true)}`);
     const opened = await vscode.env.openExternal(projectUri);
@@ -70,6 +80,22 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
     outputChannel.show(true);
     void vscode.window.showErrorMessage(t("error.mrs2OpenFailed", { message: asErrorMessage(error) }));
   }
+}
+
+function launchMounRiverStudio(executablePath: string, wvprojPath: string): Promise<void> {
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
+  const child = spawn(executablePath, [wvprojPath], {
+    cwd: path.dirname(executablePath),
+    detached: true,
+    stdio: "ignore",
+    windowsHide: false,
+  });
+  child.once("error", reject);
+  child.once("spawn", () => {
+    child.unref();
+    resolve();
+  });
+  return promise;
 }
 
 export type CurrentMrsProjectResolution =
