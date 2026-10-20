@@ -57,24 +57,12 @@ export class WchProjectFilesProvider
       state.projects.map((project) => [project.folderPath, project]),
     );
 
-    const items: FileTreeItem[] = [];
-    for (const result of state.results) {
-      const project = projectMap.get(result.folder.uri.fsPath);
-      const models = project?.models ?? [];
-      if (
-        result.validationErrors.length === 0
-        && !project?.unsupportedReason
-        && models.length > 0
-      ) {
-        // 资源管理器已经展示了工作区根目录，这里直接显示工程节点，避免重复的上级目录。
-        items.push(...models.map((model) => this.createProjectRootItem(model)));
-        continue;
-      }
-
-      items.push(this.buildWorkspaceItem(result, project));
-    }
-
-    return items;
+    return state.results.map((result) =>
+      this.buildWorkspaceItem(
+        result,
+        projectMap.get(result.folder.uri.fsPath),
+      ),
+    );
   }
 
   private buildWorkspaceItem(
@@ -112,6 +100,9 @@ export class WchProjectFilesProvider
       item.tooltip = project?.unsupportedReason ?? result.folder.uri.fsPath;
     } else if (hasValidationErrors) {
       item.children = this.buildValidationErrorItems(result);
+    } else if (result.isTargetProject) {
+      item.loadChildren = async () =>
+        models.map((model) => this.createProjectRootItem(model));
     }
 
     return item;
