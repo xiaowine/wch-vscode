@@ -75,6 +75,18 @@ export function getConfiguredMounRiverStudioPath(): string {
 		.trim();
 }
 
+// 扩展宿主带有 Electron/VS Code 专用环境变量，直接传给 MRS2 会改变其启动模式，
+// 例如继承 ELECTRON_RUN_AS_NODE 后 MRS2 会以 Node 模式启动并立即退出。
+export function createMounRiverStudioEnvironment(): NodeJS.ProcessEnv {
+	const environment: NodeJS.ProcessEnv = { ...process.env };
+	for (const key of Object.keys(environment)) {
+		if (key === 'ELECTRON_RUN_AS_NODE' || key === 'ELECTRON_NO_ATTACH_CONSOLE' || key.startsWith('VSCODE_')) {
+			delete environment[key];
+		}
+	}
+	return environment;
+}
+
 export function resolveCompilerPathFromSetting(model: WchProjectModel): string | undefined {
 	const rootPath = getConfiguredMounRiverStudioPath();
 	return resolveToolchainPaths(rootPath, model)?.gcc;

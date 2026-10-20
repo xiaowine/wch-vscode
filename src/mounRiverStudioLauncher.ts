@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {
+  createMounRiverStudioEnvironment,
   getConfiguredMounRiverStudioPath,
   resolveMounRiverStudioExecutable,
 } from "./build/buildShared";
@@ -86,14 +87,27 @@ function launchMounRiverStudio(executablePath: string, wvprojPath: string): Prom
   const { promise, resolve, reject } = Promise.withResolvers<void>();
   const child = spawn(executablePath, [wvprojPath], {
     cwd: path.dirname(executablePath),
+    env: createMounRiverStudioEnvironment(),
     detached: true,
     stdio: "ignore",
     windowsHide: false,
   });
-  child.once("error", reject);
-  child.once("spawn", () => {
+  // 进程能创建不代表 MRS2 真的启动；继承错误环境变量时它会立刻退出。
+  const timer = setTimeout(() => {
     child.unref();
     resolve();
+  }, 2000);
+  child.once("error", (error) => {
+    clearTimeout(timer);
+    reject(error);
+  });
+  child.once("exit", (code) => {
+    clearTimeout(timer);
+    if (code === 0) {
+      resolve();
+      return;
+    }
+    reject(new Error(`MounRiver Studio exited with code ${code ?? "unknown"}`));
   });
   return promise;
 }

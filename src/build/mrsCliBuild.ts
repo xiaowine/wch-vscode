@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import * as vscode from "vscode";
 import {
+    createMounRiverStudioEnvironment,
     getConfiguredMounRiverStudioPath,
     resolveMounRiverStudioExecutable,
 } from "./buildShared";
@@ -124,7 +125,7 @@ function executeSilentCommand(
     try {
         child = spawn(executablePath, args, {
             cwd,
-            env: createSpawnEnvironment(),
+            env: createMounRiverStudioEnvironment(),
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"],
         });
@@ -197,17 +198,6 @@ function getBuildOutputChannel(): vscode.OutputChannel {
         outputChannel = vscode.window.createOutputChannel(t("build.outputChannel"));
     }
     return outputChannel;
-}
-
-// 扩展宿主可能带有 Electron/VS Code 专用环境变量，直接传给 MRS2 会改变其启动模式。
-function createSpawnEnvironment(): NodeJS.ProcessEnv {
-    const environment: NodeJS.ProcessEnv = { ...process.env };
-    for (const key of Object.keys(environment)) {
-        if (key === "ELECTRON_RUN_AS_NODE" || key === "ELECTRON_NO_ATTACH_CONSOLE" || key.startsWith("VSCODE_")) {
-            delete environment[key];
-        }
-    }
-    return environment;
 }
 
 function appendCapturedOutput(current: string, chunk: string): string {
