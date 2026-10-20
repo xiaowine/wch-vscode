@@ -70,9 +70,9 @@ export function registerWorkspaceRefresh(
 	afterRefresh?: () => void | Promise<void>,
 ): void {
 	const watchers = [
-		vscode.workspace.createFileSystemWatcher('**/.cproject'),
-		vscode.workspace.createFileSystemWatcher('**/*.launch'),
-		vscode.workspace.createFileSystemWatcher('**/*.wvproj'),
+		vscode.workspace.createFileSystemWatcher('.cproject'),
+		vscode.workspace.createFileSystemWatcher('*.launch'),
+		vscode.workspace.createFileSystemWatcher('*.wvproj'),
 	];
 	const refresh = async () => {
 		await refreshProjectDetectionViews(providers);
@@ -92,19 +92,11 @@ export function registerWorkspaceRefresh(
 }
 
 // 按规则检测单个工作区文件夹是否为目标项目。
+// 只接受工作区根目录下的 MRS 工程文件，避免打开父目录时把示例工程全部识别进来。
 async function detectProjectInFolder(folder: vscode.WorkspaceFolder): Promise<ProjectDetectionResult> {
-	const cprojectFiles = await vscode.workspace.findFiles(
-		new vscode.RelativePattern(folder, '**/.cproject'),
-		'**/node_modules/**',
-	);
-	const launchFiles = await vscode.workspace.findFiles(
-		new vscode.RelativePattern(folder, '**/*.launch'),
-		'**/node_modules/**',
-	);
-	const wvprojFiles = await vscode.workspace.findFiles(
-		new vscode.RelativePattern(folder, '**/*.wvproj'),
-		'**/node_modules/**',
-	);
+	const cprojectFiles = await findRootFiles(folder, (name) => name.toLowerCase() === '.cproject');
+	const launchFiles = await findRootFiles(folder, (name) => name.toLowerCase().endsWith('.launch'));
+	const wvprojFiles = await findRootFiles(folder, (name) => name.toLowerCase().endsWith('.wvproj'));
 	const cprojectResults = await Promise.all(cprojectFiles.map((file) => parseCprojectFile(file)));
 	const wvprojResults = await Promise.all(wvprojFiles.map((file) => parseWvprojFile(file)));
 	const validCprojectFiles = filterValidFiles(cprojectFiles, cprojectResults);
@@ -140,6 +132,21 @@ async function detectProjectInFolder(folder: vscode.WorkspaceFolder): Promise<Pr
 		validationErrors,
 		isTargetProject: validCprojectFiles.length > 0 && wvprojBaseNames.size > 0,
 	};
+}
+
+async function findRootFiles(
+	folder: vscode.WorkspaceFolder,
+	matches: (name: string) => boolean,
+): Promise<vscode.Uri[]> {
+	try {
+		const entries = await vscode.workspace.fs.readDirectory(folder.uri);
+		return entries
+			.filter(([name, fileType]) => (fileType & vscode.FileType.File) !== 0 && matches(name))
+			.map(([name]) => vscode.Uri.joinPath(folder.uri, name))
+			.sort((left, right) => left.fsPath.localeCompare(right.fsPath, 'en'));
+	} catch {
+		return [];
+	}
 }
 
 function filterValidFiles(files: vscode.Uri[], results: ParsedProjectFile[]): vscode.Uri[] {

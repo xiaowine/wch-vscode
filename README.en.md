@@ -35,7 +35,7 @@ In short: MRS2 creates and stores the project configuration, VS Code handles dai
 
 ## Features
 
-- Automatically detects WCH MounRiver Studio 2 projects in the workspace and parses project configuration;
+- Automatically detects WCH MounRiver Studio 2 projects in the workspace root and parses project configuration;
 - Supports building WCH projects in VS Code;
 - Supports downloading firmware to the target board;
 - Supports starting a VS Code debug session with breakpoint debugging;

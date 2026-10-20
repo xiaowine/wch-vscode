@@ -36,7 +36,7 @@ MRS2 本身确实是基于 Eclipse/Theia/VS Code 相关技术栈做出来的集�
 
 ## 主要功能
 
-- 自动识别工作区中的 WCH MounRiver Studio 2 工程并解析工程配置；
+- 自动识别工作区根目录中的 WCH MounRiver Studio 2 工程并解析工程配置；
 - 支持在 VS Code 中编译 WCH 工程；
 - 支持下载固件到目标板；
 - 支持启动 VS Code 调试会话，并使用断点调试；
