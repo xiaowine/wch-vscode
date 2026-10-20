@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import {
     createMounRiverStudioEnvironment,
@@ -8,6 +10,8 @@ import {
 } from "./buildShared";
 import type { ResolvedBuildProject } from "./buildProjectResolver";
 import {
+    MounRiverLineColorizer,
+    MounRiverOutputFilter,
     parseMounRiverSilentOutput,
     type MounRiverSilentAction,
 } from "./mrsCliOutput";
@@ -34,7 +38,7 @@ export type MounRiverSilentOutcome = {
 const MAX_CAPTURED_OUTPUT_LENGTH = 2_000_000;
 
 let running = false;
-let outputChannel: vscode.OutputChannel | undefined;
+let buildTerminal: vscode.Terminal | undefined;
 
 export async function runMounRiverSilentBuild(
     project: ResolvedBuildProject,
@@ -85,6 +89,7 @@ export async function runMounRiverSilentBuild(
                 wvprojPath,
                 project.model.identity.folderPath,
                 action,
+                title,
                 token,
             ),
         );
@@ -100,12 +105,23 @@ function executeSilentCommand(
     wvprojPath: string,
     cwd: string,
     action: MounRiverSilentAction,
+    title: string,
     token: vscode.CancellationToken,
 ): Promise<MounRiverSilentOutcome> {
     const { promise, resolve } = Promise.withResolvers<MounRiverSilentOutcome>();
-    const channel = getBuildOutputChannel();
-    const args = [`--mrsSilentType=${action}`, `-m=${wvprojPath}`];
-    channel.appendLine(`> "${executablePath}" ${args.join(" ")}`);
+    const write = createBuildTerminalWriter();
+    const logFilter = new MounRiverOutputFilter();
+    const colorizer = new MounRiverLineColorizer();
+    const writeLog = (text: string): void => write(colorizer.push(text));
+    const args = [
+        // MRS 单实例锁按 user-data-dir 隔离；使用独立目录，避免转发到用户已打开的 MRS。
+        `--user-data-dir=${getMounRiverSilentProfileDirectory()}`,
+        `--mrsSilentType=${action}`,
+        `-m=${wvprojPath}`,
+    ];
+    // 每次构建使用新终端，旧日志自然清空。
+    writeLog(`[${new Date().toLocaleString()}] ${title}\n`);
+    writeLog(`> "${executablePath}" ${args.join(" ")}\n`);
 
     let output = "";
     let settled = false;
@@ -115,9 +131,18 @@ function executeSilentCommand(
             return;
         }
         settled = true;
-        if (!outcome.succeeded) {
-            channel.show(true);
-        }
+        writeLog(logFilter.flush());
+        writeLog(
+            `[${new Date().toLocaleTimeString()}] ${
+                outcome.succeeded
+                    ? t("build.outputSucceeded")
+                    : outcome.reason === "canceled"
+                    ? t("build.outputCanceled")
+                    : outcome.reason === "no-result"
+                    ? t("build.outputNoResult")
+                    : t("build.outputFailed")
+            }\n`,
+        );
         resolve(outcome);
     };
 
@@ -131,7 +156,7 @@ function executeSilentCommand(
         });
     } catch (error) {
         const message = asErrorMessage(error);
-        channel.appendLine(message);
+        writeLog(`${message}\n`);
         finish({ succeeded: false, reason: "spawn-failed", output: "", errorMessage: message });
         return promise;
     }
@@ -140,15 +165,16 @@ function executeSilentCommand(
     child.stderr?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
         output = appendCapturedOutput(output, chunk);
-        channel.append(chunk);
+        writeLog(logFilter.push(chunk));
     });
     child.stderr?.on("data", (chunk: string) => {
-        channel.append(chunk);
+        output = appendCapturedOutput(output, chunk);
+        writeLog(logFilter.push(chunk));
     });
 
     child.on("error", (error) => {
         const message = asErrorMessage(error);
-        channel.appendLine(message);
+        writeLog(`${message}\n`);
         finish({ succeeded: false, reason: "spawn-failed", output, errorMessage: message });
     });
     child.on("close", () => {
@@ -193,11 +219,25 @@ function reportOutcome(outcome: MounRiverSilentOutcome): void {
     }
 }
 
-function getBuildOutputChannel(): vscode.OutputChannel {
-    if (!outputChannel) {
-        outputChannel = vscode.window.createOutputChannel(t("build.outputChannel"));
-    }
-    return outputChannel;
+function getMounRiverSilentProfileDirectory(): string {
+    const base = process.env.LOCALAPPDATA || process.env.APPDATA || os.tmpdir();
+    return path.join(base, "wch-vscode", "mrs-cli-profile");
+}
+
+function createBuildTerminalWriter(): (text: string) => void {
+    buildTerminal?.dispose();
+    const writeEmitter = new vscode.EventEmitter<string>();
+    buildTerminal = vscode.window.createTerminal({
+        name: t("build.terminalName"),
+        pty: {
+            onDidWrite: writeEmitter.event,
+            open: () => undefined,
+            close: () => undefined,
+            handleInput: () => undefined,
+        },
+    });
+    buildTerminal.show(true);
+    return (text) => writeEmitter.fire(text.replace(/\r?\n/g, "\r\n"));
 }
 
 function appendCapturedOutput(current: string, chunk: string): string {
