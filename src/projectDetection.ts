@@ -93,7 +93,7 @@ export function registerWorkspaceRefresh(
 
 // 按规则检测单个工作区文件夹是否为目标项目。
 // 只接受工作区根目录下的 MRS 工程文件，避免打开父目录时把示例工程全部识别进来。
-async function detectProjectInFolder(folder: vscode.WorkspaceFolder): Promise<ProjectDetectionResult> {
+export async function detectProjectInFolder(folder: vscode.WorkspaceFolder): Promise<ProjectDetectionResult> {
 	const cprojectFiles = await findRootFiles(folder, (name) => name.toLowerCase() === '.cproject');
 	const launchFiles = await findRootFiles(folder, (name) => name.toLowerCase().endsWith('.launch'));
 	const wvprojFiles = await findRootFiles(folder, (name) => name.toLowerCase().endsWith('.wvproj'));

@@ -7,6 +7,7 @@ import * as vscode from "vscode";
 import type { WchProjectModel } from "../models/WchProjectModel";
 import {
   buildMarch,
+  createMounRiverStudioEnvironment,
   resolveCompilerExecutableName,
   resolveGdbExecutableName,
   resolveMounRiverOpenOcdExecutable,
@@ -39,9 +40,9 @@ import {
 } from "../debug/debugConfig";
 import { decodeGdbPath, resolveGdbBreakpointFile, resolveGdbFilePath } from "../debug/gdbPath";
 import { getList, getString, getTuple, parseMiLine } from "../debug/miParser";
-import { refreshWchProjectState } from "../projectDetection";
+import { detectProjectInFolder } from "../projectDetection";
 import { buildWchProjectModels } from "../projectModelBuilder";
-import { getWchProjectState, type ParsedWchProject } from "../projectState";
+import type { ParsedWchProject } from "../projectState";
 import { MounRiverLineColorizer, MounRiverOutputFilter } from "../build/mrsCliOutput";
 suite("wch-vscode Test Suite", () => {
   vscode.window.showInformationMessage("Start wch-vscode tests.");
@@ -50,45 +51,29 @@ suite("wch-vscode Test Suite", () => {
     const folderPath = await fs.mkdtemp(
       path.join(os.tmpdir(), "wch-vscode-invalid-"),
     );
-    const folderIndex = vscode.workspace.workspaceFolders?.length ?? 0;
 
     try {
       await fs.writeFile(path.join(folderPath, ".cproject"), "");
       await fs.writeFile(path.join(folderPath, "DemoProject.wvproj"), "");
 
-      const added = vscode.workspace.updateWorkspaceFolders(folderIndex, 0, {
+      const result = await detectProjectInFolder({
         uri: vscode.Uri.file(folderPath),
         name: "InvalidProject",
+        index: 0,
       });
-      assert.strictEqual(added, true);
 
-      try {
-        await refreshWchProjectState();
-        const state = getWchProjectState();
-        const result = state.results.find(
-          (item) => item.folder.uri.fsPath === folderPath,
-        );
-
-        assert.ok(result);
-        assert.strictEqual(result.isTargetProject, false);
-        assert.strictEqual(
-          state.projects.some((project) => project.folderPath === folderPath),
-          false,
-        );
-        assert.strictEqual(result.validationErrors.length, 2);
-        assert.ok(
-          result.validationErrors.some(
-            (error) => error.fileName === ".cproject",
-          ),
-        );
-        assert.ok(
-          result.validationErrors.some(
-            (error) => error.fileName === "DemoProject.wvproj",
-          ),
-        );
-      } finally {
-        vscode.workspace.updateWorkspaceFolders(folderIndex, 1);
-      }
+      assert.strictEqual(result.isTargetProject, false);
+      assert.strictEqual(result.validationErrors.length, 2);
+      assert.ok(
+        result.validationErrors.some(
+          (error) => error.fileName === ".cproject",
+        ),
+      );
+      assert.ok(
+        result.validationErrors.some(
+          (error) => error.fileName === "DemoProject.wvproj",
+        ),
+      );
     } finally {
       await fs.rm(folderPath, { recursive: true, force: true });
     }
@@ -98,38 +83,22 @@ suite("wch-vscode Test Suite", () => {
     const folderPath = await fs.mkdtemp(
       path.join(os.tmpdir(), "wch-vscode-invalid-structure-"),
     );
-    const folderIndex = vscode.workspace.workspaceFolders?.length ?? 0;
 
     try {
       await fs.writeFile(path.join(folderPath, ".cproject"), "<notCProject />");
       await fs.writeFile(path.join(folderPath, "DemoProject.wvproj"), "{}");
 
-      const added = vscode.workspace.updateWorkspaceFolders(folderIndex, 0, {
+      const result = await detectProjectInFolder({
         uri: vscode.Uri.file(folderPath),
         name: "InvalidProjectStructure",
+        index: 0,
       });
-      assert.strictEqual(added, true);
 
-      try {
-        await refreshWchProjectState();
-        const state = getWchProjectState();
-        const result = state.results.find(
-          (item) => item.folder.uri.fsPath === folderPath,
-        );
-
-        assert.ok(result);
-        assert.strictEqual(result.isTargetProject, false);
-        assert.strictEqual(
-          state.projects.some((project) => project.folderPath === folderPath),
-          false,
-        );
-        assert.strictEqual(result.validationErrors.length, 2);
-        assert.ok(
-          result.validationErrors.every((error) => error.message.length > 0),
-        );
-      } finally {
-        vscode.workspace.updateWorkspaceFolders(folderIndex, 1);
-      }
+      assert.strictEqual(result.isTargetProject, false);
+      assert.strictEqual(result.validationErrors.length, 2);
+      assert.ok(
+        result.validationErrors.every((error) => error.message.length > 0),
+      );
     } finally {
       await fs.rm(folderPath, { recursive: true, force: true });
     }
@@ -396,6 +365,10 @@ suite("wch-vscode Test Suite", () => {
   });
 
   test("reset settings and command are registered", async () => {
+    const extension = vscode.extensions.getExtension("winerealms.wch-vscode");
+    assert.ok(extension);
+    await extension.activate();
+
     const config = vscode.workspace.getConfiguration("wchVscode");
     assert.strictEqual(config.get("resetMode"), "nrst");
     assert.strictEqual(config.get("powerOffDelayMs"), 100);
@@ -845,6 +818,18 @@ suite("wch-vscode Test Suite", () => {
         "No hardware breakpoint available",
       );
     }
+  });
+
+  test("MRS silent build uses an isolated portable profile", () => {
+    const environment = createMounRiverStudioEnvironment(
+      "C:\\Users\\test\\AppData\\Local\\wch-vscode\\mrs-cli-portable",
+    );
+
+    assert.strictEqual(
+      environment.VSCODE_PORTABLE,
+      "C:\\Users\\test\\AppData\\Local\\wch-vscode\\mrs-cli-portable",
+    );
+    assert.strictEqual(environment.ELECTRON_RUN_AS_NODE, undefined);
   });
 
   test("MRS executable is resolved relative to install root", () => {
