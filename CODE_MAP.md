@@ -13,7 +13,7 @@
    - `WchToolsSidebarProvider`：设置与工具视图
 3. 创建状态栏项，并注册工作区刷新监听。
 4. `initializeProjectState` 执行首次项目检测，缺少 cpptools 配置时自动生成。
-5. 注册命令：刷新、编译、清理、清理并编译、下载、编译并下载、调试、复制侧栏值、生成 C/C++ 配置、在 MRS 中打开项目、打开设置。
+5. 注册命令：刷新、编译、清理、清理并编译、下载、编译并下载、调试、掉电复位、复制侧栏值、生成 C/C++ 配置、在 MRS 中打开项目、打开设置。
 
 命令 ID 统一使用 `wchVscode.*`，与 `package.json` 的 `contributes.commands` 对应。
 
@@ -44,7 +44,10 @@
 | `src/build/buildProjectTask.ts` | 编译/清理/清理并编译入口，`make` 模式通过 `vscode.ProcessExecution` 执行 |
 | `src/build/mrsCliBuild.ts` | `mrs-cli` 模式：`spawn` MRS `--mrsSilentType=...` |
 | `src/build/mrsCliOutput.ts` | 解析 MRS 静默构建日志中的成功/失败标记 |
-| `src/build/downloadProjectTask.ts` | OpenOCD 下载与擦除参数 |
+| `src/build/downloadProjectTask.ts` | OpenOCD 下载与擦除参数；下载输出写入共享面板 |
+| `src/build/openOcdOutput.ts` | 下载与掉电复位共用的“WCH 下载/复位”终端 |
+| `src/build/powerOffReset.ts` | 掉电复位：设置读取、OpenOCD 断电/上电参数、两次进程调用 |
+| `src/build/powerOffResetCommand.ts` | 手动掉电复位命令 |
 | `src/build/buildDownloadProjectTask.ts` | 编译并下载组合命令 |
 | `src/build/taskExecution.ts` | 等待 VS Code 任务结束并取退出码 |
 | `src/build/buildShared.ts` | MRS 安装路径、工具链/OpenOCD 路径、环境变量清理等共享逻辑 |
@@ -72,7 +75,7 @@
 | --- | --- |
 | `src/sidebar/WchVscodeSidebarProvider.ts` | 概览视图：工程、目标、构建、调试、下载信息 |
 | `src/sidebar/WchProjectFilesProvider.ts` | “WCH 文件”视图：工程本地目录 + `linkedFolders` |
-| `src/sidebar/WchToolsSidebarProvider.ts` | 设置与工具视图：MRS 路径、编译方式、在 MRS 中打开 |
+| `src/sidebar/WchToolsSidebarProvider.ts` | 设置与工具视图：MRS 路径、编译方式、复位方式（掉电时显示复位电压、重新上电等待时间）、在 MRS 中打开 |
 | `src/projectConfigurationPrompt.ts` | 工程缺少下载/调试配置时的提示 |
 | `src/mounRiverStudioLauncher.ts` | 定位当前工程并启动 MRS |
 | `src/cpptoolsConfigGenerator.ts` | 生成 `.vscode/c_cpp_properties.json` |

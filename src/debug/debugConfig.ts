@@ -10,6 +10,11 @@ import {
   TWO_WIRE_DEBUG_INTERFACE_MODE,
   type ResolvedOpenOcdPaths,
 } from "../build/buildShared";
+import {
+  getPowerOutput,
+  getResetMode,
+  type PowerOutput,
+} from "../build/powerOffReset";
 import { t } from "../i18n";
 import { logDebug } from "./debugLog";
 
@@ -50,7 +55,6 @@ export async function buildWchRiscvDebugLaunchConfig(
   logDebug(`Building debug launch config for ${projectName}`);
   logDebug(`GDB path: ${gdbPath}`);
   logDebug(`OpenOCD path: ${openOcdPath}`);
-  logDebug(`OpenOCD args: ${openOcdArgs.join(" ")}`);
   logDebug(`GDB endpoint: ${project.model.debug.host || "localhost"}:${project.model.debug.gdbPort || 3333}`);
   logDebug(`Stop at: ${project.model.debug.stopAt || "<disabled>"}`);
   logDebug(`WVProj path: ${project.model.identity.files.wvproj}`);
@@ -88,6 +92,7 @@ export async function buildWchRiscvDebugLaunchConfig(
 export function buildOpenOcdServerArgs(
   project: ResolvedBuildProject,
   openOcdPaths: ResolvedOpenOcdPaths,
+  powerOn?: PowerOutput,
 ): string[] {
   const gdbPort = project.model.debug.gdbPort || 3333;
   const telnetPort = project.model.debug.telnetPort || 4444;
@@ -114,6 +119,13 @@ export function buildOpenOcdServerArgs(
   // 2-wire 必须在 init 之前执行，否则 OpenOCD 会直接报错。
   if (project.model.flash.debugInterfaceMode === TWO_WIRE_DEBUG_INTERFACE_MODE) {
     appendOpenOcdCommandArg(args, "two_wires");
+  }
+
+  // 掉电复位模式下，上电和调试必须在同一个 OpenOCD 会话里，避免中间让 CPU 运行。
+  const effectivePowerOn =
+    powerOn ?? (getResetMode() === "powerOff" ? getPowerOutput() : undefined);
+  if (effectivePowerOn) {
+    args.push("-c", `${effectivePowerOn === "5v" ? "pow5v" : "pow3v3"} on`);
   }
 
   appendOpenOcdCommandArg(args, "init");

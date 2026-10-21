@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {
@@ -13,7 +14,16 @@ import {
   resolveCurrentBuildTarget,
   resolveProjectFileSystemPath,
 } from "./buildProjectResolver";
-import { executeTaskAndWait } from "./taskExecution";
+import {
+  getPowerOutput,
+  getResetMode,
+  powerOffProject,
+  type PowerOutput,
+} from "./powerOffReset";
+import {
+  createOpenOcdTerminalWriter,
+  type OpenOcdTerminalWriter,
+} from "./openOcdOutput";
 import { t } from "../i18n";
 
 export const DOWNLOAD_PROJECT_COMMAND = "wchVscode.downloadProject";
@@ -52,6 +62,14 @@ export async function downloadResolvedProject(
   project: ResolvedBuildProject,
   showSuccessMessage = true,
 ): Promise<boolean> {
+  const output = createOpenOcdTerminalWriter();
+  output.writeLine(
+    t("download.starting", {
+      projectName:
+        project.model.identity.name || project.model.identity.baseName,
+    }),
+  );
+
   const mounRiverStudioPath = getConfiguredMounRiverStudioPath();
   const openOcdPaths = resolveOpenOcdPaths(mounRiverStudioPath);
   if (!openOcdPaths) {
@@ -75,73 +93,111 @@ export async function downloadResolvedProject(
     return false;
   }
 
-  const task = createDownloadTask(project, openOcdPaths, downloadTargetPath);
+  const resetMode = getResetMode();
+  const resetLog = (message: string) => output.writeLine(message);
+  const powerOn = resetMode === "powerOff" ? getPowerOutput() : undefined;
+  if (resetMode === "powerOff") {
+    try {
+      // 先只关闭电源；上电和下载在同一个 OpenOCD 进程里完成，避免中间让 CPU 运行。
+      await powerOffProject(project, { log: resetLog });
+    } catch (error) {
+      void vscode.window.showErrorMessage(formatOpenOcdFailureMessage(
+        t("error.operationDownloadFailed"),
+        t("error.powerResetFailed", { message: asErrorMessage(error) }),
+      ));
+      return false;
+    }
+  }
+
   try {
-    const exitCode = await executeTaskAndWait(task);
+    const exitCode = await runOpenOcdDownload(
+      project,
+      openOcdPaths,
+      downloadTargetPath,
+      powerOn,
+      output,
+    );
     if (exitCode === 0) {
+      output.writeLine(t("download.succeededLog"));
       if (showSuccessMessage) {
         void vscode.window.showInformationMessage(t("message.downloadSucceeded"));
       }
       return true;
     }
 
+    const detail = t("error.openOcdExitCode", {
+      exitCode: exitCode ?? t("value.unknown"),
+    });
+    output.writeLine(detail);
     void vscode.window.showErrorMessage(formatOpenOcdFailureMessage(
       t("error.operationDownloadFailed"),
-      t("error.openOcdExitCode", { exitCode: exitCode ?? t("value.unknown") }),
+      detail,
     ));
   } catch (error) {
-    void vscode.window.showErrorMessage(formatOpenOcdFailureMessage(t("error.operationDownloadFailed"), asErrorMessage(error)));
+    const message = asErrorMessage(error);
+    output.writeLine(message);
+    void vscode.window.showErrorMessage(
+      formatOpenOcdFailureMessage(t("error.operationDownloadFailed"), message),
+    );
   }
   return false;
 }
 
-function createDownloadTask(
+async function runOpenOcdDownload(
   project: ResolvedBuildProject,
   openOcdPaths: { executable: string; config: string },
   downloadTargetPath: string,
-): vscode.Task {
-  const execution = new vscode.ProcessExecution(
-    openOcdPaths.executable,
-    buildOpenOcdDownloadArgs(project, openOcdPaths.config, downloadTargetPath),
-    {
+  powerOn: PowerOutput | undefined,
+  output: OpenOcdTerminalWriter,
+): Promise<number | null> {
+  const args = buildOpenOcdDownloadArgs(
+    project,
+    openOcdPaths.config,
+    downloadTargetPath,
+    powerOn,
+  );
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(openOcdPaths.executable, args, {
       cwd: path.dirname(openOcdPaths.executable),
-    },
-  );
-  const task = new vscode.Task(
-    {
-      type: "wchDownload",
-      workspaceFolder: project.workspaceFolder.name,
-      projectName: project.model.identity.name || project.model.identity.baseName,
-    },
-    project.workspaceFolder,
-    t("tooltip.actionTarget", {
-      action: t("action.download"),
-      projectName: project.model.identity.name || project.model.identity.baseName,
-    }),
-    "wch-vscode",
-    execution,
-    [],
-  );
-  task.group = vscode.TaskGroup.Build;
-  task.presentationOptions = {
-    clear: true,
-    panel: vscode.TaskPanelKind.Dedicated,
-    reveal: vscode.TaskRevealKind.Always,
-  };
-  return task;
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    child.stdout?.on("data", (chunk: Buffer) => output.write(chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => output.write(chunk.toString()));
+    child.on("error", (error) => {
+      output.writeLine(asErrorMessage(error));
+      reject(error);
+    });
+    child.on("close", (exitCode) => {
+      output.flush();
+      resolve(exitCode);
+    });
+  });
 }
 
 export function buildOpenOcdDownloadArgs(
   project: ResolvedBuildProject,
   configPath: string,
   downloadTargetPath: string,
+  powerOn?: PowerOutput,
 ): string[] {
   const args = ["-f", configPath];
   appendOpenOcdChipIdArgs(args, project.model.flash.mcuType);
 
+  // 上电和下载必须在同一个 OpenOCD 会话里，避免上电后、下载前 CPU 运行。
+  if (powerOn) {
+    appendOpenOcdCommandArg(args, "dbgtool");
+  }
+
   // 2-wire 需要在 init 之前切换。
   if (project.model.flash.debugInterfaceMode === TWO_WIRE_DEBUG_INTERFACE_MODE) {
     args.push("-c", "two_wires");
+  }
+
+  if (powerOn) {
+    args.push("-c", `${powerOn === "5v" ? "pow5v" : "pow3v3"} on`);
   }
 
   appendOpenOcdCommandArg(args, "init");

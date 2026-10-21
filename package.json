@@ -2,7 +2,7 @@
   "name": "wch-vscode",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "winerealms",
   "packageManager": "pnpm@11.1.0",
   "license": "GPL-3.0-only",
@@ -81,6 +81,11 @@
         "category": "WCH"
       },
       {
+        "command": "wchVscode.powerOffReset",
+        "title": "%command.powerOffReset%",
+        "category": "WCH"
+      },
+      {
         "command": "wchVscode.openInMounRiverStudio",
         "title": "%command.openInMrs2%",
         "category": "WCH"
@@ -152,6 +157,50 @@
           "default": "make",
           "scope": "window",
           "description": "%configuration.buildMethod.description%"
+        },
+        "wchVscode.resetMode": {
+          "type": "string",
+          "enum": [
+            "nrst",
+            "powerOff"
+          ],
+          "enumItemLabels": [
+            "%configuration.resetMode.nrst.label%",
+            "%configuration.resetMode.powerOff.label%"
+          ],
+          "enumDescriptions": [
+            "%configuration.resetMode.nrst%",
+            "%configuration.resetMode.powerOff%"
+          ],
+          "default": "nrst",
+          "scope": "window",
+          "description": "%configuration.resetMode.description%"
+        },
+        "wchVscode.powerOffDelayMs": {
+          "type": "number",
+          "default": 100,
+          "minimum": 0,
+          "maximum": 10000,
+          "scope": "window",
+          "description": "%configuration.powerOffDelayMs.description%"
+        },
+        "wchVscode.powerOutput": {
+          "type": "string",
+          "enum": [
+            "3v3",
+            "5v"
+          ],
+          "enumItemLabels": [
+            "%configuration.powerOutput.3v3.label%",
+            "%configuration.powerOutput.5v.label%"
+          ],
+          "enumDescriptions": [
+            "%configuration.powerOutput.3v3%",
+            "%configuration.powerOutput.5v%"
+          ],
+          "default": "3v3",
+          "scope": "window",
+          "description": "%configuration.powerOutput.description%"
         }
       }
     },

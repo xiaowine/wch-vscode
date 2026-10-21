@@ -7,6 +7,7 @@ import {
 import { t } from "../i18n";
 import { buildWchRiscvDebugLaunchConfig } from "./debugConfig";
 import { logDebug, showDebugLog } from "./debugLog";
+import { getResetMode, powerOffProject } from "../build/powerOffReset";
 
 export const DEBUG_PROJECT_COMMAND = "wchVscode.debugProject";
 
@@ -40,6 +41,12 @@ export async function debugCurrentProject(
     const project = await resolveBuildProjectForExecution(editor);
     logDebug(t("debugLog.resolvedProject", { projectName: project.model.identity.name || project.model.identity.baseName }));
     logDebug(`ELF: ${project.elfPath}`);
+
+    if (getResetMode() === "powerOff") {
+      // 只关闭电源；调试 OpenOCD 启动时会先上电再 init/halt，中间没有运行窗口。
+      await powerOffProject(project, { log: logDebug });
+    }
+
     const launchConfig = await buildWchRiscvDebugLaunchConfig(project);
     logDebug(t("debugLog.startingSession", { name: launchConfig.name }));
     const started = await vscode.debug.startDebugging(project.workspaceFolder, launchConfig);

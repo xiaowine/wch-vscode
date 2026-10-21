@@ -2,54 +2,22 @@
 
 [中文](README.md) | [English](README.en.md)
 
-> **Important: This is a community-developed third-party VS Code extension. It is not affiliated with or endorsed by WCH or MounRiver Studio.**
->
-> This extension only provides VS Code integration for MounRiver Studio projects. The toolchain, project configuration, and related software are still provided by MounRiver Studio.
+> This is a community-developed third-party VS Code extension. It is not affiliated with or endorsed by WCH or MounRiver Studio.
 
-A VS Code extension for MounRiver Studio RISC-V projects.
+If you build WCH projects with MounRiver Studio but prefer to work in VS Code, this extension lets you keep editing, building, downloading, and debugging in VS Code. The project is still created and managed by MRS, and nothing needs to be migrated to a new format.
 
-Its goal is simple: keep using the VS Code you are familiar with, while bringing MRS project build, download, and debug configuration into VS Code. You do not need to migrate the project into a new structure, and you do not need to stay in MRS just to write code.
+## What It Does
 
-## Why This Extension Exists
+- Detects MRS projects in your workspace automatically;
+- Builds, downloads, and debugs from VS Code;
+- Provides C/C++ IntelliSense and navigation;
+- Leaves the project structure unchanged, so you can still open it in MRS.
 
-MounRiver Studio can create and maintain WCH projects, and it includes the toolchain, OpenOCD, download configuration, and debug configuration. But many developers prefer VS Code for everyday coding:
+## Installation
 
-- The editor is lighter and the extension ecosystem is familiar;
-- File search, Git, terminal, shortcuts, and multi-window workflows are more convenient;
-- You may not want to switch between MRS and VS Code just to edit, build, or download firmware.
+You need Windows and MRS 2 or MRS 3. MRS 1 is not supported.
 
-This extension is built for that workflow. It reads MRS project files from the current workspace, reuses existing MRS project information as much as possible, and exposes common actions directly in VS Code.
-
-## Why Not Use an MRS Build Based on VS Code
-
-MRS is an independent IDE. It is complete, official, and works out of the box, but it also means accepting its full workflow.
-
-This extension takes a different approach:
-
-- Keep using the original VS Code instead of replacing your editor;
-- Do not take over the whole development environment, only add the common WCH build, download, and debug entry points;
-- Reuse the toolchain and configuration from MRS to avoid duplicate setup;
-- Work with your existing VS Code extensions, themes, shortcuts, and Git workflow;
-- Keep the project compatible with MRS, instead of converting it into a plugin-only format.
-
-In short: MRS creates and stores the project configuration, VS Code handles daily coding, and this extension connects the missing part between them.
-
-## Features
-
-- Automatically detects WCH MounRiver Studio projects in the workspace root and parses project configuration;
-- Supports building WCH projects in VS Code;
-- Supports downloading firmware to the target board;
-- Supports starting a VS Code debug session with breakpoint debugging;
-- Supports C/C++ IntelliSense by automatically generating the required `.vscode/c_cpp_properties.json` configuration.
-
-## Installation And Configuration
-
-Before using this extension, you only need:
-
-- Windows;
-- MRS 2 or MRS 3 installed (MRS 1 is not supported).
-
-After installing the extension, search for `wchVscode.mounRiverStudioPath` in VS Code settings and fill in the MRS installation directory:
+After installing the extension, tell it where MRS is installed. Search for “MounRiver Studio installation root” in Settings, or click the same item in the “Settings & Tools” sidebar:
 
 ```json
 {
@@ -57,141 +25,74 @@ After installing the extension, search for `wchVscode.mounRiverStudioPath` in VS
 }
 ```
 
-This path is the MounRiver Studio installation directory required by the extension.
+Point it to the MounRiver Studio folder itself, not to `bin` or another subfolder.
 
-### Choosing A Build Method
+## Settings
 
-The extension supports two side-by-side build methods. Search for `wchVscode.buildMethod` in VS Code settings and choose:
+### Build Method
 
-- `make` (default, plugin parses parameters): the extension parses the project configuration, generates makefiles, and calls `make` from the MRS toolchain directly;
-- `mrs-cli` (MRS parses parameters): MRS parses the project configuration and builds itself, exactly like building inside MRS.
+The default “Plugin parses parameters” option works for most projects. If you want the build to behave exactly like MRS, choose “MRS parses parameters”.
 
-In `mrs-cli` mode, build, clean, clean and build, build and download, and the build before debugging are all handled by MRS parsing the project parameters. MRS always exits with code 0, so success is determined by the "Build Finished"/"Build Failed" markers in the log. If an MRS instance is already running, the parameters may be forwarded without returning a log; close MRS first.
+If you use MRS to parse parameters and MRS is already running, close it first before building from VS Code.
 
-## Commands And Shortcuts
+### Reset Method
 
-After opening a folder that contains a WCH MRS project, the extension scans the project automatically. You can run these actions from the sidebar, status bar, or command palette:
+The default is “Normal reset”, which works the same way as before.
 
-- `WCH: Refresh Projects`: rescan projects;
-- `WCH: Build`: build the current project;
-- `WCH: Clean`: clean build output;
-- `WCH: Clean and Build`: clean and rebuild;
-- `WCH: Download`: download the generated firmware;
-- `WCH: Build and Download`: build first, then download on success;
-- `WCH: Debug`: build first, then start debugging;
-- `WCH: Open in MRS`: open the current project in MRS.
+On some chips, the debug pins are shared with other functions, and a normal reset cannot enter download mode. In that case, change the reset method to “Power-off reset” in the “Settings & Tools” sidebar.
 
-Default shortcuts match MRS:
+When power-off reset is selected, you can also set:
 
-- `F7`: build;
-- `Shift+F7`: clean and build;
-- `F8`: download;
-- `F5`: debug.
+- **Reset voltage**: choose 3.3V or 5V to match the target board;
+- **Re-power wait time**: 100 ms by default; increase it if the board starts slowly.
+
+The target board must be powered by WCH-Link. If it has its own external power supply, power-off reset cannot cut the power. If the wrong reset voltage is selected, the target will not actually power off.
+
+## Usage
+
+Open a folder containing a `.wvproj` file and the extension will detect the project. You can then use the sidebar, status bar, or Command Palette.
+
+| Action | Shortcut |
+| --- | --- |
+| Build | `F7` |
+| Clean and Build | `Shift+F7` |
+| Download | `F8` |
+| Debug | `F5` |
+
+Type `WCH` in the Command Palette to see the other commands.
+
+When downloading or resetting, the “WCH Download/Reset” terminal opens and shows progress.
 
 ## Sidebar
 
-The sidebar is split into two views:
+- **Overview**: project, chip, build, debug, and download information;
+- **Settings & Tools**: MRS installation folder, build method, reset method, and related settings.
 
-- **Overview**: detected project information;
-- **Settings & Tools**: MRS directory setting, build method setting, and opening the current project in MRS.
-
-"Open Project in MRS" resolves the MRS project for the workspace containing the current file. If the current folder is not an MRS project, the extension shows a warning and does not open anything.
-
-The Overview view shows:
-
-- Project name and path;
-- Toolchain type;
-- Architecture and ABI;
-- Output file;
-- Linker script;
-- OpenOCD configuration;
-- GDB port;
-- Whether the project is supported.
-
-If the project has no download or debug configuration yet, the extension will ask you to complete the configuration in MRS first.
-
-## Current Scope
-
-Currently supported:
-
-- WCH RISC-V projects;
-- Standard MRS 2/3 installation layout on Windows;
-- Existing download and debug configuration from MRS projects;
-- Common WCH RISC-V toolchain layouts, including GCC8, GCC12, and GCC15.
-
-Not a main focus for now:
-
-- Non-RISC-V WCH projects;
-- New projects created completely outside MRS configuration;
-- Heavily customized MRS installation layouts;
-- Linux or macOS.
-
-## Calling From Other Extensions
-
-Other VS Code extensions can invoke the build-and-download command directly. The command returns `true` when it succeeds.
-
-```ts
-await vscode.commands.executeCommand<boolean>(
-  "wchVscode.buildDownloadProject",
-  {
-    folderPath: "D:\\workspace\\CH32V203Demo",
-    showSuccessMessage: true,
-  },
-);
-```
-
-You can also locate the project by `.wvproj` path, project name, or base name:
-
-```ts
-await vscode.commands.executeCommand<boolean>(
-  "wchVscode.buildDownloadProject",
-  {
-    wvprojPath: "D:\\workspace\\CH32V203Demo\\CH32V203Demo.wvproj",
-  },
-);
-```
-
-With no arguments, the command selects the target project from the active editor and workspace:
-
-```ts
-await vscode.commands.executeCommand<boolean>("wchVscode.buildDownloadProject");
-```
+Only the settings that apply are shown. For example, reset voltage and wait time are hidden when normal reset is selected.
 
 ## FAQ
 
-### Can this extension fully replace MRS?
+**Can it fully replace MRS?**
 
-No, and it is not intended to. MRS is still useful for creating projects, changing chip-related configuration, and maintaining download/debug configuration. This extension is better suited for daily coding, build, download, and debug work in VS Code.
+No. Use MRS to create projects, change chip settings, and maintain download/debug configuration. This extension is for day-to-day editing, building, downloading, and debugging.
 
-### Why does it say download is not configured?
+**It says download is not configured. What should I do?**
 
-The current project does not have a usable download or debug configuration. Open the project in MRS first, finish the download/debug setup, then return to VS Code.
+Open the project in MRS, complete a download or debug configuration once, then return to VS Code.
 
-### Why can it not find make.exe, OpenOCD, or GDB?
+**It cannot find the toolchain, OpenOCD, or GDB.**
 
-Usually `wchVscode.mounRiverStudioPath` is incorrect. Make sure it points to the MounRiver Studio installation root, not a subdirectory.
+The MRS installation folder is usually wrong. Make sure it points to the MounRiver Studio installation root, not to `bin` or a subfolder.
 
-### Will it modify my MRS project?
+**Will it modify my project?**
 
-The extension reads MRS project configuration and may generate VS Code configuration files such as `.vscode/c_cpp_properties.json`. It does not convert the project into another format.
+It reads the MRS project files and may generate `.vscode/c_cpp_properties.json`, but it does not convert the project to another format.
 
-## Development
+## Feedback
 
-This project uses pnpm:
+Report problems or suggestions on GitHub Issues:
 
-```sh
-pnpm install
-pnpm run compile
-pnpm run lint
-pnpm test
-```
-
-Package:
-
-```sh
-pnpm run vscode:prepublish
-pnpm run package
-```
+https://github.com/xiaowine/wch-vscode/issues
 
 ## License
 

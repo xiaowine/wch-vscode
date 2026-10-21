@@ -11,6 +11,16 @@ import {
 import { MOUN_RIVER_STUDIO_PATH_SETTING } from "./build/buildShared";
 import { BUILD_METHOD_SETTING } from "./build/buildMethod";
 import {
+  POWER_OFF_DELAY_SETTING,
+  POWER_OUTPUT_SETTING,
+  RESET_MODE_SETTING,
+} from "./build/powerOffReset";
+import { disposeOpenOcdTerminal } from "./build/openOcdOutput";
+import {
+  POWER_OFF_RESET_COMMAND,
+  powerOffResetCurrentProject,
+} from "./build/powerOffResetCommand";
+import {
   ensureCppToolsConfigFileIfMissing,
   generateCppToolsConfigFile,
   GENERATE_CPPTOOLS_CONFIG_COMMAND,
@@ -45,6 +55,9 @@ import {
 import {
   OPEN_BUILD_METHOD_SETTING_COMMAND,
   OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND,
+  OPEN_POWER_OFF_DELAY_SETTING_COMMAND,
+  OPEN_POWER_OUTPUT_SETTING_COMMAND,
+  OPEN_RESET_MODE_SETTING_COMMAND,
   WchToolsSidebarProvider,
 } from "./sidebar/WchToolsSidebarProvider";
 import {
@@ -160,6 +173,13 @@ export function activate(context: vscode.ExtensionContext) {
     },
     refreshStatusBarItems,
   );
+  const powerOffResetCommand = registerCommandAndRefresh(
+    POWER_OFF_RESET_COMMAND,
+    async () => {
+      await powerOffResetCurrentProject();
+    },
+    refreshStatusBarItems,
+  );
   // 注册侧栏复制命令，点击叶子节点时将对应值写入剪贴板。
   const copySidebarValueCommand = vscode.commands.registerCommand(
     COPY_SIDEBAR_VALUE_COMMAND,
@@ -195,6 +215,15 @@ export function activate(context: vscode.ExtensionContext) {
         || event.affectsConfiguration(
           `${WCH_CONFIGURATION_SECTION}.${BUILD_METHOD_SETTING}`,
         )
+        || event.affectsConfiguration(
+          `${WCH_CONFIGURATION_SECTION}.${RESET_MODE_SETTING}`,
+        )
+        || event.affectsConfiguration(
+          `${WCH_CONFIGURATION_SECTION}.${POWER_OFF_DELAY_SETTING}`,
+        )
+        || event.affectsConfiguration(
+          `${WCH_CONFIGURATION_SECTION}.${POWER_OUTPUT_SETTING}`,
+        )
       ) {
         toolsSidebarProvider.refresh();
       }
@@ -218,6 +247,33 @@ export function activate(context: vscode.ExtensionContext) {
       );
     },
   );
+  const openResetModeSettingCommand = vscode.commands.registerCommand(
+    OPEN_RESET_MODE_SETTING_COMMAND,
+    async () => {
+      await vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        `${WCH_CONFIGURATION_SECTION}.${RESET_MODE_SETTING}`,
+      );
+    },
+  );
+  const openPowerOffDelaySettingCommand = vscode.commands.registerCommand(
+    OPEN_POWER_OFF_DELAY_SETTING_COMMAND,
+    async () => {
+      await vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        `${WCH_CONFIGURATION_SECTION}.${POWER_OFF_DELAY_SETTING}`,
+      );
+    },
+  );
+  const openPowerOutputSettingCommand = vscode.commands.registerCommand(
+    OPEN_POWER_OUTPUT_SETTING_COMMAND,
+    async () => {
+      await vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        `${WCH_CONFIGURATION_SECTION}.${POWER_OUTPUT_SETTING}`,
+      );
+    },
+  );
   context.subscriptions.push(
     buildProjectCommand,
     cleanProjectCommand,
@@ -225,13 +281,18 @@ export function activate(context: vscode.ExtensionContext) {
     downloadProjectCommand,
     buildDownloadProjectCommand,
     debugProjectCommand,
+    powerOffResetCommand,
     ...Object.values(statusBarItems),
     copySidebarValueCommand,
     generateCppToolsConfigCommand,
     openInMounRiverStudioCommand,
     openMounRiverStudioPathSettingCommand,
     openBuildMethodSettingCommand,
+    openResetModeSettingCommand,
+    openPowerOffDelaySettingCommand,
+    openPowerOutputSettingCommand,
     toolsConfigurationListener,
+    { dispose: disposeOpenOcdTerminal },
     refreshProjectsCommand,
     vscode.window.registerTreeDataProvider(
       "wchVscodeSidebarView",

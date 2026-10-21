@@ -2,54 +2,22 @@
 
 [中文](README.md) | [English](README.en.md)
 
-> **重要提示：本项目是社区开发的第三方 VS Code 扩展，不隶属于 WCH 或 MounRiver Studio，也未获得其官方背书。**
->
-> 本扩展仅用于辅助在 VS Code 中使用 MounRiver Studio 工程。工具链、工程配置及相关软件仍由 MounRiver Studio 提供。
+> 本项目是社区开发的第三方 VS Code 扩展，不隶属于 WCH 或 MounRiver Studio，也未获得其官方背书。
 
-一个给MounRiver Studio RISC-V 工程使用的 VS Code 扩展。
+如果你用 MounRiver Studio 开发 WCH 芯片，但平时更习惯 VS Code，这个插件可以让你继续在 VS Code 里写代码、编译、下载和调试。工程仍然由 MRS 创建和管理，不需要迁移成新的项目格式。
 
-它的目标很简单：继续使用你熟悉的 VS Code，同时把 MRS 工程里的编译、下载、调试配置接进来。你不需要把项目重新迁移成一套新的工程结构，也不需要为了写代码长期停留在 MRS 里。
+## 能做什么
 
-## 为什么会有这个插件
+- 自动识别工作区里的 MRS 工程；
+- 在 VS Code 里编译、下载和调试；
+- 提供 C/C++ 代码提示和跳转；
+- 保留工程原有结构，随时可以回到 MRS 打开。
 
-MounRiver Studio 能创建和维护 WCH 工程，也带有工具链、OpenOCD、下载和调试配置。但很多人日常写代码更习惯 VS Code：
+## 安装
 
-- 编辑器响应更轻，插件生态更熟悉；
-- 文件搜索、Git、终端、快捷键和多窗口工作流更顺手；
-- 不想为了改几行代码、编译一下、下载一下，就在 MRS 和 VS Code 之间来回切换。
+需要 Windows，以及 MRS 2 或 MRS 3（不支持 MRS 1）。
 
-这个扩展就是为这个场景准备的。它读取当前工作区里的 MRS 工程文件，尽量复用 MRS 已经生成的工程信息，然后在 VS Code 里提供常用操作。
-
-## 为什么不是用“基于 VS Code 修改的 MRS”
-
-MRS 本身确实是基于 Eclipse/Theia/VS Code 相关技术栈做出来的集成环境，但它仍然是一个独立 IDE。直接使用 MRS 的好处是完整、官方、开箱即用；缺点是你必须接受它完整的工作方式。
-
-这个插件选择了另一条路：
-
-- 保留原版 VS Code，不替换你的编辑器；
-- 不接管整个开发环境，只补齐 WCH 工程最常用的编译、下载、调试入口；
-- 继续使用 MRS 自带的工具链和配置，减少重复配置；
-- 可以和你现有的 VS Code 插件、主题、快捷键、Git 工作流一起用；
-- 项目仍然可以随时回到 MRS 打开，不会被改造成只能由本插件使用的格式。
-
-简单说：MRS 负责创建和保存工程配置，VS Code 负责日常写代码，这个插件负责把中间断开的那一段接起来。
-
-## 主要功能
-
-- 自动识别工作区根目录中的 WCH MounRiver Studio 工程并解析工程配置；
-- 支持在 VS Code 中编译 WCH 工程；
-- 支持下载固件到目标板；
-- 支持启动 VS Code 调试会话，并使用断点调试；
-- 支持 C/C++ 代码提示，并自动生成所需的 `.vscode/c_cpp_properties.json` 配置。
-
-## 安装与配置
-
-使用这个插件前，你只需要准备好两件事：
-
-- Windows；
-- 已安装 MRS 2 或 MRS 3（不支持 MRS 1）；
-
-安装插件后，在 VS Code 设置中搜索 `wchVscode.mounRiverStudioPath`，填写 MRS 的安装目录：
+安装扩展后，告诉插件 MRS 装在哪里。可以在设置里搜索“MounRiver Studio 安装根目录”，也可以直接点击侧栏“设置与工具”里的这一项：
 
 ```json
 {
@@ -57,141 +25,74 @@ MRS 本身确实是基于 Eclipse/Theia/VS Code 相关技术栈做出来的集�
 }
 ```
 
-这个路径是插件依赖的 MounRiver Studio 安装目录。
+填到 MounRiver Studio 这一层即可，不要填到 `bin` 或其他子目录。
 
-### 选择编译方式
+## 常用设置
 
-插件支持两种并列的编译方式，在 VS Code 设置中搜索 `wchVscode.buildMethod` 选择：
+### 编译方式
 
-- `make`（默认，插件解析参数）：由插件解析工程配置、生成 makefile，并直接调用 MRS 工具链中的 `make`；
-- `mrs-cli`（MRS 解析参数）：由 MRS 自行解析工程配置并执行构建，与在 MRS 内点击编译完全一致。
+默认的“插件解析参数”适合大多数情况。如果你希望编译过程和 MRS 里完全一致，可以选择“MRS 解析参数”。
 
-`mrs-cli` 模式下，编译、清理、清理并编译、编译并下载和调试前的编译都会交给 MRS 解析参数并执行。MRS 的退出码恒为 0，因此成败以日志中的“编译完成/编译失败”为准；如果已有 MRS 实例在运行，参数可能被转发且不返回日志，请先关闭 MRS。
+使用 MRS 解析参数时，如果已经打开了 MRS，建议先关闭，再回到 VS Code 编译。
 
-## 命令与快捷键
+### 复位方式
 
-打开一个包含 WCH MRS 工程的文件夹后，插件会自动扫描工程。你可以通过侧边栏、状态栏或者命令面板执行这些操作：
+默认是“普通复位”，和原来的下载方式一致。
 
-- `WCH: Refresh Projects`：重新扫描工程；
-- `WCH: Build`：编译当前工程；
-- `WCH: Clean`：清理构建输出；
-- `WCH: Clean and Build`：清理后重新编译；
-- `WCH: Download`：下载已生成的固件；
-- `WCH: Build and Download`：先编译，成功后下载；
-- `WCH: Debug`：先编译，成功后启动调试；
-- `WCH: Open in MRS`：用 MRS 打开当前工程。
+有些芯片的调试接口会被其他功能复用，普通复位后无法进入下载模式。这时可以在侧栏“设置与工具”里把复位方式改成“掉电复位”。
 
-默认快捷键与 MRS 保持一致：
+选择掉电复位后，还可以设置：
 
-- `F7`：编译；
-- `Shift+F7`：清理并编译；
-- `F8`：下载；
-- `F5`：调试。
+- **复位电压**：按目标板实际供电选择 3.3V 或 5V；
+- **重新上电等待时间**：默认 100 ms，目标板启动较慢时可以适当调大。
 
-## 侧边栏能看到什么
+目标板需要由 WCH-Link 供电；如果目标板是外部独立供电，掉电复位不会真正切断电源。复位电压选错时，目标也不会断电。
 
-侧栏分为两个视图：
+## 使用
 
-- **概览**：查看当前识别到的工程信息；
-- **设置与工具**：MRS 目录设置、编译方式设置，以及在 MRS 中打开当前工程。
+打开包含 `.wvproj` 文件的文件夹，插件会自动识别工程。之后可以通过侧栏、状态栏或命令面板执行常用操作。
 
-“在 MRS 中打开项目”会按当前文件所在的工作区查找 MRS 工程；当前文件夹不是 MRS 工程时会给出警告，不会执行打开操作。
+| 操作 | 快捷键 |
+| --- | --- |
+| 编译 | `F7` |
+| 清理并编译 | `Shift+F7` |
+| 下载 | `F8` |
+| 调试 | `F5` |
 
-概览视图会展示：
+更多命令可以在命令面板里输入 `WCH` 查看。
 
-- 工程名称和路径；
-- 工具链类型；
-- 架构和 ABI；
-- 输出文件；
-- 链接脚本；
-- OpenOCD 配置；
-- GDB 端口；
-- 是否支持当前工程。
+下载或复位时，底部会打开“WCH 下载/复位”终端显示进度。
 
-如果项目还没有在 MRS 中配置下载或调试，插件会提示你先回到 MRS 完成配置。
+## 侧栏
 
-## 当前支持范围
+- **概览**：查看工程、芯片、构建、调试和下载信息；
+- **设置与工具**：修改 MRS 安装目录、编译方式、复位方式等设置。
 
-目前主要支持：
-
-- WCH RISC-V 工程；
-- 标准 MRS 2/3 Windows 安装结构；
-- MRS 工程中已有的下载和调试配置；
-- GCC8、GCC12、GCC15 等常见 WCH RISC-V 工具链布局。
-
-暂不作为重点支持：
-
-- 非 RISC-V WCH 工程；
-- 完全脱离 MRS 配置的新建工程；
-- 非标准手动改造过的 MRS 安装目录；
-- Linux/macOS 环境。
-
-## 给其他扩展调用
-
-如果你在写其他 VS Code 扩展，也可以直接调用本插件的一键编译下载命令。命令成功时返回 `true`。
-
-```ts
-await vscode.commands.executeCommand<boolean>(
-  "wchVscode.buildDownloadProject",
-  {
-    folderPath: "D:\\workspace\\CH32V203Demo",
-    showSuccessMessage: true,
-  },
-);
-```
-
-也可以传入 `.wvproj` 路径、工程名或基础名来定位项目：
-
-```ts
-await vscode.commands.executeCommand<boolean>(
-  "wchVscode.buildDownloadProject",
-  {
-    wvprojPath: "D:\\workspace\\CH32V203Demo\\CH32V203Demo.wvproj",
-  },
-);
-```
-
-不传参数时，会按当前活动编辑器和工作区自动选择目标工程：
-
-```ts
-await vscode.commands.executeCommand<boolean>("wchVscode.buildDownloadProject");
-```
+“设置与工具”里只会显示当前需要的选项。例如选择普通复位时，不会显示复位电压和等待时间。
 
 ## 常见问题
 
-### 这个插件能完全替代 MRS 吗？
+**能完全替代 MRS 吗？**
 
-不能，也不打算完全替代。MRS 仍然适合用来创建工程、修改芯片相关配置、维护下载和调试配置。本插件更适合日常写代码、编译、下载和调试。
+不能。创建工程、修改芯片配置、维护下载和调试参数仍然建议在 MRS 里完成。这个插件主要方便日常写代码、编译、下载和调试。
 
-### 为什么提示没有配置下载？
+**提示没有配置下载怎么办？**
 
-说明当前工程缺少可用的下载或调试配置。请先用 MRS 打开项目，完成一次下载/调试配置后再回到 VS Code。
+先在 MRS 里打开工程，完成一次下载或调试配置，再回到 VS Code。
 
-### 为什么找不到 make.exe、OpenOCD 或 GDB？
+**提示找不到工具链、OpenOCD 或 GDB？**
 
-通常是 `wchVscode.mounRiverStudioPath` 配错了。请确认它指向 MounRiver Studio 安装根目录，而不是某个子目录。
+通常是 MRS 安装目录填错了。请确认它指向 MounRiver Studio 安装根目录，而不是 `bin` 或某个子目录。
 
-### 会修改我的 MRS 工程吗？
+**会修改我的工程吗？**
 
-插件会读取 MRS 工程配置，并在需要时生成 VS Code 使用的配置文件，例如 `.vscode/c_cpp_properties.json`。它不会把工程改造成另一套格式。
+插件会读取 MRS 工程文件，必要时生成 `.vscode/c_cpp_properties.json`，但不会把工程改成另一种格式。
 
-## 开发
+## 反馈
 
-本项目使用 pnpm：
+遇到问题或有建议，可以在 GitHub Issues 里反馈：
 
-```sh
-pnpm install
-pnpm run compile
-pnpm run lint
-pnpm test
-```
-
-打包：
-
-```sh
-pnpm run vscode:prepublish
-pnpm run package
-```
+https://github.com/xiaowine/wch-vscode/issues
 
 ## 协议
 

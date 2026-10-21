@@ -6,12 +6,23 @@ import {
 } from "../mounRiverStudioLauncher";
 import { getConfiguredMounRiverStudioPath } from "../build/buildShared";
 import { getBuildMethod } from "../build/buildMethod";
+import {
+    getPowerOffDelayMs,
+    getPowerOutput,
+    getResetMode,
+} from "../build/powerOffReset";
 import { t } from "../i18n";
 
 export const OPEN_MOUN_RIVER_STUDIO_PATH_SETTING_COMMAND =
     "wchVscode.openMounRiverStudioPathSetting";
 export const OPEN_BUILD_METHOD_SETTING_COMMAND =
     "wchVscode.openBuildMethodSetting";
+export const OPEN_RESET_MODE_SETTING_COMMAND =
+    "wchVscode.openResetModeSetting";
+export const OPEN_POWER_OFF_DELAY_SETTING_COMMAND =
+    "wchVscode.openPowerOffDelaySetting";
+export const OPEN_POWER_OUTPUT_SETTING_COMMAND =
+    "wchVscode.openPowerOutputSetting";
 
 // 设置与工具视图：集中放置设置入口和 MRS 打开动作。
 export class WchToolsSidebarProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
@@ -39,8 +50,11 @@ export class WchToolsSidebarProvider implements vscode.TreeDataProvider<vscode.T
 
         const mounRiverStudioPath = getConfiguredMounRiverStudioPath();
         const buildMethod = getBuildMethod();
+        const resetMode = getResetMode();
+        const powerOffDelayMs = getPowerOffDelayMs();
+        const powerOutput = getPowerOutput();
 
-        return [
+        const items: vscode.TreeItem[] = [
             this.createSettingItem(
                 t("tools.mrsPathSetting"),
                 mounRiverStudioPath || t("tools.valueNotConfigured"),
@@ -57,8 +71,38 @@ export class WchToolsSidebarProvider implements vscode.TreeDataProvider<vscode.T
                 OPEN_BUILD_METHOD_SETTING_COMMAND,
                 `${t("tools.buildMethodSettingTooltip")}\n${buildMethod}`,
             ),
-            this.createOpenProjectItem(resolveCurrentMrsProject()),
+            this.createSettingItem(
+                t("tools.resetModeSetting"),
+                resetMode === "powerOff"
+                    ? t("tools.resetModePowerOff")
+                    : t("tools.resetModeNrst"),
+                OPEN_RESET_MODE_SETTING_COMMAND,
+                `${t("tools.resetModeSettingTooltip")}\n${resetMode}`,
+            ),
         ];
+
+        // 普通复位不需要复位电压和重新上电等待时间，只有掉电复位才显示。
+        if (resetMode === "powerOff") {
+            items.push(
+                this.createSettingItem(
+                    t("tools.powerOutputSetting"),
+                    powerOutput === "5v"
+                        ? t("tools.powerOutput5v")
+                        : t("tools.powerOutput3v3"),
+                    OPEN_POWER_OUTPUT_SETTING_COMMAND,
+                    `${t("tools.powerOutputSettingTooltip")}\n${powerOutput}`,
+                ),
+                this.createSettingItem(
+                    t("tools.powerOffDelaySetting"),
+                    `${powerOffDelayMs} ms`,
+                    OPEN_POWER_OFF_DELAY_SETTING_COMMAND,
+                    `${t("tools.powerOffDelaySettingTooltip")}\n${powerOffDelayMs} ms`,
+                ),
+            );
+        }
+
+        items.push(this.createOpenProjectItem(resolveCurrentMrsProject()));
+        return items;
     }
 
     private createSettingItem(

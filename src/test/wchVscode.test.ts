@@ -21,6 +21,13 @@ import {
   normalizeFlashAddress,
   toOpenOcdPath,
 } from "../build/downloadProjectTask";
+import { buildOpenOcdPowerCycleArgs } from "../build/powerOffReset";
+import {
+  OPEN_POWER_OFF_DELAY_SETTING_COMMAND,
+  OPEN_POWER_OUTPUT_SETTING_COMMAND,
+  OPEN_RESET_MODE_SETTING_COMMAND,
+  WchToolsSidebarProvider,
+} from "../sidebar/WchToolsSidebarProvider";
 import {
   resolveProjectFileSystemPath,
   toLogicalProjectPath,
@@ -292,6 +299,125 @@ suite("wch-vscode Test Suite", () => {
     assert.ok(args.indexOf("two_wires") < args.indexOf("init"));
   });
 
+  test("download power-on and program share one OpenOCD session", () => {
+    const project = createResolvedBuildProject();
+    project.model.flash.mcuType = "CH32L10x";
+
+    const args = buildOpenOcdDownloadArgs(
+      project,
+      "F:\\MounRiver\\OpenOCD\\bin\\wch-riscv.cfg",
+      "C:\\workspace\\DemoProject\\obj\\DemoProject.hex",
+      "3v3",
+    );
+
+    assert.ok(args.includes("dbgtool"));
+    assert.ok(args.includes("pow3v3 on"));
+    assert.ok(args.indexOf("pow3v3 on") < args.indexOf("init"));
+    assert.ok(args.indexOf("dbgtool") < args.indexOf("init"));
+    assert.ok(args[args.length - 1].includes("program"));
+  });
+
+  test("download openocd args reset exactly once after program", () => {
+    const project = createResolvedBuildProject();
+    project.model.flash.mcuType = "CH59x";
+
+    const args = buildOpenOcdDownloadArgs(
+      project,
+      "F:\\MounRiver\\OpenOCD\\bin\\wch-riscv.cfg",
+      "C:\\workspace\\DemoProject\\obj\\DemoProject.hex",
+    );
+
+    const programCommand = args[args.length - 1];
+    assert.ok(programCommand.includes("verify"));
+    assert.ok(programCommand.includes("reset"));
+    assert.ok(programCommand.includes("exit"));
+    assert.strictEqual(programCommand.match(/\breset\b/g)?.length, 1);
+  });
+
+  test("power-off reset args place power commands before init", () => {
+    const project = createResolvedBuildProject();
+    project.model.flash.mcuType = "CH32V003";
+    project.model.flash.debugInterfaceMode = "2-wires serial";
+    const configPath = "F:\\MounRiver\\OpenOCD\\bin\\wch-riscv.cfg";
+
+    assert.deepStrictEqual(
+      buildOpenOcdPowerCycleArgs(project, configPath, "off", false),
+      [
+        "-c",
+        "gdb_port disabled",
+        "-c",
+        "telnet_port disabled",
+        "-c",
+        "tcl_port disabled",
+        "-f",
+        configPath,
+        "-c",
+        "chip_id CH32V003",
+        "-c",
+        "dbgtool",
+        "-c",
+        "two_wires",
+        "-c",
+        "pow3v3 off",
+        "-c",
+        "init",
+        "-c",
+        "shutdown",
+      ],
+    );
+
+    const onArgs = buildOpenOcdPowerCycleArgs(
+      project,
+      configPath,
+      "on",
+      true,
+    );
+    assert.ok(onArgs.includes("pow3v3 on"));
+    assert.ok(!onArgs.includes("pow5v on"));
+    assert.ok(onArgs.indexOf("pow3v3 on") < onArgs.indexOf("init"));
+    assert.ok(onArgs.indexOf("halt") > onArgs.indexOf("init"));
+    assert.ok(onArgs.indexOf("shutdown") > onArgs.indexOf("halt"));
+  });
+
+  test("power-off reset switches only the selected reset voltage", () => {
+    const project = createResolvedBuildProject();
+    project.model.flash.mcuType = "CH32V003";
+
+    const args = buildOpenOcdPowerCycleArgs(
+      project,
+      "F:\\MounRiver\\OpenOCD\\bin\\wch-riscv.cfg",
+      "off",
+      false,
+      "5v",
+    );
+
+    assert.ok(args.includes("pow5v off"));
+    assert.ok(!args.includes("pow3v3 off"));
+  });
+
+  test("reset settings and command are registered", async () => {
+    const config = vscode.workspace.getConfiguration("wchVscode");
+    assert.strictEqual(config.get("resetMode"), "nrst");
+    assert.strictEqual(config.get("powerOffDelayMs"), 100);
+    assert.strictEqual(config.get("powerOutput"), "3v3");
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(commands.includes("wchVscode.powerOffReset"));
+  });
+
+  test("tools sidebar hides power settings for normal reset", () => {
+    const provider = new WchToolsSidebarProvider();
+    const commandIds = provider
+      .getChildren()
+      .map((item) =>
+        typeof item.command === "object" ? item.command.command : undefined,
+      );
+
+    assert.ok(commandIds.includes(OPEN_RESET_MODE_SETTING_COMMAND));
+    assert.ok(!commandIds.includes(OPEN_POWER_OUTPUT_SETTING_COMMAND));
+    assert.ok(!commandIds.includes(OPEN_POWER_OFF_DELAY_SETTING_COMMAND));
+  });
+
   test("OpenOCD chip id normalization matches MRS aliases", () => {
     assert.strictEqual(normalizeOpenOcdChipId("CH59x"), "CH59x");
     assert.strictEqual(normalizeOpenOcdChipId("CH32V00x"), "CH32V003");
@@ -542,6 +668,20 @@ suite("wch-vscode Test Suite", () => {
     assert.ok(args.includes("dbgtool"));
     assert.strictEqual(args.filter((arg) => arg === "two_wires").length, 1);
     assert.ok(args.indexOf("two_wires") < args.indexOf("init"));
+    assert.ok(args.indexOf("dbgtool") < args.indexOf("init"));
+  });
+
+  test("debug openocd args power on before init in power-off mode", () => {
+    const project = createResolvedBuildProject();
+    const openOcdPaths = resolveOpenOcdPaths(
+      "F:\\MounRiver\\MounRiver_Studio2",
+    );
+    assert.ok(openOcdPaths);
+    project.model.flash.mcuType = "CH32L10x";
+
+    const args = buildOpenOcdServerArgs(project, openOcdPaths, "3v3");
+    assert.ok(args.includes("pow3v3 on"));
+    assert.ok(args.indexOf("pow3v3 on") < args.indexOf("init"));
     assert.ok(args.indexOf("dbgtool") < args.indexOf("init"));
   });
 
