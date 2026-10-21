@@ -88,12 +88,17 @@ export function getConfiguredMounRiverStudioPath(): string {
 
 // 扩展宿主带有 Electron/VS Code 专用环境变量，直接传给 MRS 会改变其启动模式，
 // 例如继承 ELECTRON_RUN_AS_NODE 后 MRS 会以 Node 模式启动并立即退出。
-export function createMounRiverStudioEnvironment(): NodeJS.ProcessEnv {
+export function createMounRiverStudioEnvironment(portableDataPath?: string): NodeJS.ProcessEnv {
 	const environment: NodeJS.ProcessEnv = { ...process.env };
 	for (const key of Object.keys(environment)) {
 		if (key === 'ELECTRON_RUN_AS_NODE' || key === 'ELECTRON_NO_ATTACH_CONSOLE' || key.startsWith('VSCODE_')) {
 			delete environment[key];
 		}
+	}
+	// MRS 3 安装目录带 data 时会自动进入 portable 模式，--user-data-dir 会被忽略。
+	// 静默构建必须通过 VSCODE_PORTABLE 指定独立数据目录，避免复用用户已打开的 MRS 实例。
+	if (portableDataPath) {
+		environment.VSCODE_PORTABLE = portableDataPath;
 	}
 	return environment;
 }

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -113,9 +113,10 @@ function executeSilentCommand(
     const logFilter = new MounRiverOutputFilter();
     const colorizer = new MounRiverLineColorizer();
     const writeLog = (text: string): void => write(colorizer.push(text));
+    // MRS 3 的安装目录带 data 时会自动使用 portable 模式，--user-data-dir 会被忽略。
+    // 通过 VSCODE_PORTABLE 指定独立数据目录，避免复用用户已打开的 MRS 实例。
+    const portableDataPath = getMounRiverSilentProfileDirectory();
     const args = [
-        // MRS 单实例锁按 user-data-dir 隔离；使用独立目录，避免转发到用户已打开的 MRS。
-        `--user-data-dir=${getMounRiverSilentProfileDirectory()}`,
         `--mrsSilentType=${action}`,
         `-m=${wvprojPath}`,
     ];
@@ -148,9 +149,10 @@ function executeSilentCommand(
 
     let child: ChildProcess;
     try {
+        mkdirSync(portableDataPath, { recursive: true });
         child = spawn(executablePath, args, {
             cwd,
-            env: createMounRiverStudioEnvironment(),
+            env: createMounRiverStudioEnvironment(portableDataPath),
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"],
         });
@@ -221,7 +223,7 @@ function reportOutcome(outcome: MounRiverSilentOutcome): void {
 
 function getMounRiverSilentProfileDirectory(): string {
     const base = process.env.LOCALAPPDATA || process.env.APPDATA || os.tmpdir();
-    return path.join(base, "wch-vscode", "mrs-cli-profile");
+    return path.join(base, "wch-vscode", "mrs-cli-portable");
 }
 
 function createBuildTerminalWriter(): (text: string) => void {
