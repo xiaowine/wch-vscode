@@ -22,3 +22,6 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 src/test/**
+docs/**
+CODE_MAP.md
+pnpm-workspace.yaml
