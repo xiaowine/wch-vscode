@@ -629,7 +629,8 @@ function buildWchProjectModel(
       program: getBoolean(flashConfig?.program) ?? false,
       verify: getBoolean(flashConfig?.verify) ?? false,
       reset: getBoolean(flashConfig?.reset) ?? false,
-      debugInterfaceMode: getString(flashConfig?.debug_interface_mode)?.trim() ?? "",
+      debugInterfaceMode:
+        getString(flashConfig?.debug_interface_mode)?.trim() ?? "",
     },
   };
 }
@@ -844,17 +845,29 @@ function buildMarch(
 
   // Single-letter standard extensions in fixed order
   let single = "";
-  if (riscvExtensions.includes("M")) single += "m";
-  if (riscvExtensions.includes("A")) single += "a";
-  if (riscvExtensions.includes("C")) single += "c";
+  if (riscvExtensions.includes("M")) {
+    single += "m";
+  }
+  if (riscvExtensions.includes("A")) {
+    single += "a";
+  }
+  if (riscvExtensions.includes("C")) {
+    single += "c";
+  }
 
   // Multi-letter extensions as underscore-prefixed tokens; XW goes last
   const hasXW = riscvExtensions.includes("XW");
   const multiTokens: string[] = [];
-  if (riscvExtensions.includes("B")) multiTokens.push("_zba", "_zbb", "_zbc", "_zbs");
-  if (riscvExtensions.includes("Zmmul")) multiTokens.push("_zmmul");
+  if (riscvExtensions.includes("B")) {
+    multiTokens.push("_zba", "_zbb", "_zbc", "_zbs");
+  }
+  if (riscvExtensions.includes("Zmmul")) {
+    multiTokens.push("_zmmul");
+  }
   const hasZExts = multiTokens.length > 0;
-  if (hasXW && hasZExts) multiTokens.push("_xw");
+  if (hasXW && hasZExts) {
+    multiTokens.push("_xw");
+  }
 
   const multiSuffix = multiTokens.join("");
   const xwDirect = hasXW && !hasZExts ? "xw" : "";
