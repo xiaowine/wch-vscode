@@ -7,7 +7,7 @@
 
 ---
 
-## 🛠️ Key Features
+## Key Features
 
 - **Project Build**: One-key incremental compilation (`F7`) and clean rebuild (`Shift+F7`), seamlessly invoking the underlying toolchain.
 - **Firmware Flashing**: Fast one-key firmware download (`F8`) to the target MCU.
@@ -15,7 +15,7 @@
 
 ---
 
-## ✨ Why Choose This Extension
+## Why Choose This Extension
 
 - **Zero-Config IntelliSense**: Automatically parses `.wvproj` and synchronizes target architecture, global macros, and include paths to the C/C++ extension—no manual tweaking of `c_cpp_properties.json`.
 - **Dedicated Project Files View**: Provides an IDE-like source tree that filters files by the active build configuration, showing only source files participating in the build.
@@ -24,7 +24,7 @@
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Prerequisites
 
@@ -43,7 +43,7 @@ Search for `WCH VS Code` in the VS Code Extensions view (`Ctrl+Shift+X`) and cli
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 <details>
 <summary><b>Will this modify or pollute my existing project files?</b></summary>
