@@ -1,99 +1,64 @@
-# WCH VS Code Extension
+<div align="center">
+  <img src="media/wch-vscode-icon.png" alt="WCH VS Code Logo" width="80" height="80">
+  <h1>WCH VS Code</h1>
+  <p>基于 MounRiver Studio 工具链的 VS Code 扩展，开箱即用构建、烧录与单步调试，无需迁移原生工程。</p>
+  <p><a href="README.md">中文</a> · <a href="README.en.md">English</a></p>
+</div>
 
-[中文](README.md) | [English](README.en.md)
+---
 
-> 本项目是社区开发的第三方 VS Code 扩展，不隶属于 WCH 或 MounRiver Studio，也未获得其官方背书。
+## 🛠️ 主要功能
 
-如果你用 MounRiver Studio 开发 WCH 芯片，但平时更习惯 VS Code，这个插件可以让你继续在 VS Code 里写代码、编译、下载和调试。工程仍然由 MRS 创建和管理，不需要迁移成新的项目格式。
+- **工程编译**：支持一键增量构建（`F7`）与清理重新构建（`Shift+F7`），无缝调用底层编译工具链。
+- **固件下载**：一键将固件快速烧录（`F8`）至目标芯片。
+- **断点调试**：一键启动（`F5`）基于 OpenOCD 与 GDB 的芯片级硬件调试，支持源码断点、单步步进与变量监视。
 
-## 能做什么
+---
 
-- 自动识别工作区里的 MRS 工程；
-- 在 VS Code 里编译、下载和调试；
-- 提供 C/C++ 代码提示和跳转；
-- 保留工程原有结构，随时可以回到 MRS 打开。
+## ✨ 为什么选择
 
-## 安装
+- **零配置智能补全**：自动解析 `.wvproj`，将芯片架构、宏定义与头文件路径智能同步给 C/C++ 扩展，彻底告别手动折腾 `c_cpp_properties.json`。
+- **专属工程文件视图**：提供类似 IDE 的专属源码树，自动按当前构建配置过滤文件，只展示真正参与编译的代码，告别在庞大杂乱的目录树中翻找。
+- **免配置工具链联动**：自动串联底层编译器与调试适配器，无需手写繁琐的 `tasks.json` 与 `launch.json`，一键拉起完整开发流。
+- **完全非侵入式共存**：对原有工程只读解析，不引入任何私有项目格式；随时可点击“在 MounRiver Studio 中打开”，团队成员自由选择工具，互不影响。
 
-需要 Windows，以及 MRS 2 或 MRS 3（不支持 MRS 1）。
+---
 
-安装扩展后，告诉插件 MRS 装在哪里。可以在设置里搜索“MounRiver Studio 安装根目录”，也可以直接点击侧栏“设置与工具”里的这一项：
+## 🚀 快速上手
 
-```json
-{
-  "wchVscode.mounRiverStudioPath": "F:\\MounRiver\\MounRiver_Studio2"
-}
-```
+### 1. 依赖
 
-填到 MounRiver Studio 这一层即可，不要填到 `bin` 或其他子目录。
+- **操作系统**：Windows
+- **MounRiver Studio**：[MRS 2 或 MRS 3](http://www.mounriver.com/)
+- **前置扩展**：[C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)（`ms-vscode.cpptools`）
 
-## 常用设置
+### 2. 安装插件
 
-### 编译方式
+在 VS Code 扩展面板（`Ctrl+Shift+X`）搜索 `WCH VS Code` 点击安装，或直接访问 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=WineRealms.wch-vscode) 获取。
 
-默认的“插件解析参数”适合大多数情况。如果你希望编译过程和 MRS 里完全一致，可以选择“MRS 解析参数”。
+### 3. 打开与配置
 
-使用 MRS 解析参数时，如果已经打开了 MRS，建议先关闭，再回到 VS Code 编译。
+1. 在 VS Code 中打开包含 `.wvproj` 的工程文件夹。
+2. 首次使用时按弹窗提示（或在侧栏中）指定 **MounRiver Studio 安装根目录**（如 `D:\MounRiver\MounRiver_Studio2`）。
 
-### 复位方式
+---
 
-默认是“普通复位”，和原来的下载方式一致。
+## ❓ 常见问题
 
-有些芯片的调试接口会被其他功能复用，普通复位后无法进入下载模式。这时可以在侧栏“设置与工具”里把复位方式改成“掉电复位”。
+<details>
+<summary><b>会修改或污染我现有的工程文件吗？</b></summary>
+不会。插件对 <code>.wvproj</code> 仅进行只读解析，所有的构建、调试参数均从原有工程动态提取。仅会在工作区生成 VS Code 代码补全所需的辅助配置。
+</details>
 
-选择掉电复位后，还可以设置：
+<details>
+<summary><b>为什么下载或调试提示找不到工具链？</b></summary>
+请检查侧栏中的“MounRiver Studio 安装根目录”是否直接指向安装目录根路径，而不是子级目录。
+</details>
 
-- **复位电压**：按目标板实际供电选择 3.3V 或 5V；
-- **重新上电等待时间**：默认 100 ms，目标板启动较慢时可以适当调大。
+---
 
-目标板需要由 WCH-Link 供电；如果目标板是外部独立供电，掉电复位不会真正切断电源。复位电压选错时，目标也不会断电。
+## 开源协议
 
-## 使用
+本项目采用 [GNU General Public License v3.0](LICENSE) 开源协议。
 
-打开包含 `.wvproj` 文件的文件夹，插件会自动识别工程。之后可以通过侧栏、状态栏或命令面板执行常用操作。
-
-| 操作 | 快捷键 |
-| --- | --- |
-| 编译 | `F7` |
-| 清理并编译 | `Shift+F7` |
-| 下载 | `F8` |
-| 调试 | `F5` |
-
-更多命令可以在命令面板里输入 `WCH` 查看。
-
-下载或复位时，底部会打开“WCH 下载/复位”终端显示进度。
-
-## 侧栏
-
-- **概览**：查看工程、芯片、构建、调试和下载信息；
-- **设置与工具**：修改 MRS 安装目录、编译方式、复位方式等设置。
-
-“设置与工具”里只会显示当前需要的选项。例如选择普通复位时，不会显示复位电压和等待时间。
-
-## 常见问题
-
-**能完全替代 MRS 吗？**
-
-不能。创建工程、修改芯片配置、维护下载和调试参数仍然建议在 MRS 里完成。这个插件主要方便日常写代码、编译、下载和调试。
-
-**提示没有配置下载怎么办？**
-
-先在 MRS 里打开工程，完成一次下载或调试配置，再回到 VS Code。
-
-**提示找不到工具链、OpenOCD 或 GDB？**
-
-通常是 MRS 安装目录填错了。请确认它指向 MounRiver Studio 安装根目录，而不是 `bin` 或某个子目录。
-
-**会修改我的工程吗？**
-
-插件会读取 MRS 工程文件，必要时生成 `.vscode/c_cpp_properties.json`，但不会把工程改成另一种格式。
-
-## 反馈
-
-遇到问题或有建议，可以在 GitHub Issues 里反馈：
-
-https://github.com/xiaowine/wch-vscode/issues
-
-## 协议
-
-GNU General Public License v3.0。
+_免责声明：本项目为社区独立开源项目，不隶属于南京沁恒微电子 (WCH) 或 MounRiver Studio 官方。_
