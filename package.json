@@ -45,10 +45,7 @@
         "command": "wchVscode.refreshProjects",
         "title": "%command.refreshProjects%",
         "category": "WCH",
-        "icon": {
-          "light": "media/refresh.svg",
-          "dark": "media/refresh.svg"
-        }
+        "icon": "$(refresh)"
       },
       {
         "command": "wchVscode.buildProject",
