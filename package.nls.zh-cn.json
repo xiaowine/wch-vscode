@@ -16,7 +16,7 @@
   "view.overview": "概览",
   "view.tools": "设置与工具",
   "configuration.title": "wch-vscode",
-  "configuration.mounRiverStudioPath.description": "MounRiver Studio 安装根目录，例 F:\\MounRiver\\MounRiver_Studio2",
+  "configuration.mounRiverStudioPath.description": "MounRiver Studio 安装根目录。Windows 示例：F:\\MounRiver\\MounRiver_Studio2。Linux 默认路径：/usr/share/MRS3/MRS-linux-x64。",
   "configuration.buildMethod.description": "选择 WCH 工程的编译方式：由插件解析工程参数并调用 make，或由 MRS 解析工程参数并执行构建。",
   "configuration.buildMethod.make.label": "插件解析参数",
   "configuration.buildMethod.mrsCli.label": "MRS 解析参数",

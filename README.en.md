@@ -28,7 +28,7 @@
 
 ### 1. Prerequisites
 
-- **OS**: Windows
+- **OS**: Windows and Linux (requires the matching MounRiver Studio build)
 - **MounRiver Studio**: [MRS 2 or MRS 3](http://www.mounriver.com/)
 - **Required Extension**: [C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools) (`ms-vscode.cpptools`)
 
@@ -39,7 +39,7 @@ Search for `WCH VS Code` in the VS Code Extensions view (`Ctrl+Shift+X`) and cli
 ### 3. Open & Configure
 
 1. Open any workspace folder containing a `.wvproj` file in VS Code.
-2. On first launch, follow the prompt (or use the sidebar setting) to specify your **MounRiver Studio Installation Root** (e.g., `D:\MounRiver\MounRiver_Studio2`).
+2. On first launch, follow the prompt (or use the sidebar setting) to specify your **MounRiver Studio Installation Root**. For Windows, use a path such as `D:\MounRiver\MounRiver_Studio2`. On Linux, use the extracted or installed application root.
 
 ---
 

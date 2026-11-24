@@ -71,7 +71,9 @@ export async function openProjectInMounRiverStudio(wvprojPath: string): Promise<
       return;
     }
 
-    const command = `${quoteCmdArgument(executablePath)} ${quoteCmdArgument(wvprojPath)}`;
+    const command = process.platform === "win32"
+      ? `${quoteCmdArgument(executablePath)} ${quoteCmdArgument(wvprojPath)}`
+      : `${quoteShellArgument(executablePath)} ${quoteShellArgument(wvprojPath)}`;
     outputChannel.appendLine(`hidden terminal command: ${command}`);
     const terminal = getOrCreateHiddenTerminal(mounRiverStudioPath);
     terminal.sendText(command);
@@ -184,8 +186,8 @@ function getOrCreateHiddenTerminal(cwd: string): vscode.Terminal {
 
   hiddenMrsTerminal = vscode.window.createTerminal({
     name: t("mrs2.terminalName"),
-    shellPath: "cmd.exe",
-    shellArgs: ["/Q"],
+    shellPath: process.platform === "win32" ? "cmd.exe" : "/bin/bash",
+    shellArgs: process.platform === "win32" ? ["/Q"] : [],
     cwd,
     hideFromUser: true,
     isTransient: true,
@@ -195,6 +197,10 @@ function getOrCreateHiddenTerminal(cwd: string): vscode.Terminal {
 
 function quoteCmdArgument(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+function quoteShellArgument(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

@@ -28,7 +28,7 @@
 
 ### 1. 依赖
 
-- **操作系统**：Windows
+- **操作系统**：Windows、Linux（需要对应平台的 MounRiver Studio）
 - **MounRiver Studio**：[MRS 2 或 MRS 3](http://www.mounriver.com/)
 - **前置扩展**：[C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)（`ms-vscode.cpptools`）
 
@@ -39,7 +39,7 @@
 ### 3. 打开与配置
 
 1. 在 VS Code 中打开包含 `.wvproj` 的工程文件夹。
-2. 首次使用时按弹窗提示（或在侧栏中）指定 **MounRiver Studio 安装根目录**（如 `D:\MounRiver\MounRiver_Studio2`）。
+2. 首次使用时按弹窗提示（或在侧栏中）指定 **MounRiver Studio 安装根目录**。Windows 示例为 `D:\MounRiver\MounRiver_Studio2`，Linux 请填写解压或安装后的根目录。
 
 ---
 

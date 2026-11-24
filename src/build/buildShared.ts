@@ -9,7 +9,7 @@ const TOOLCHAIN_ROOT_SEGMENTS = [
   "resources",
   "app",
   "resources",
-  "win32",
+  process.platform === "linux" ? "linux" : "win32",
   "components",
   "WCH",
   "Toolchain",
@@ -19,19 +19,19 @@ const MAKE_EXECUTABLE_SEGMENTS = [
   "resources",
   "app",
   "resources",
-  "win32",
+  process.platform === "linux" ? "linux" : "win32",
   "others",
   "Build_Tools",
   "Make",
   "bin",
-  "make.exe",
+  process.platform === "linux" ? "make" : "make.exe",
 ] as const;
 
 const OPENOCD_ROOT_SEGMENTS = [
   "resources",
   "app",
   "resources",
-  "win32",
+  process.platform === "linux" ? "linux" : "win32",
   "components",
   "WCH",
   "OpenOCD",
@@ -59,8 +59,13 @@ export type ResolvedOpenOcdPaths = {
 };
 
 // MRS2 与 MRS3 的主程序文件名不同，同一安装目录只会存在其中一个。
-const MOUN_RIVER_STUDIO_3_EXECUTABLE = "MounRiver Studio 3.exe";
-const MOUN_RIVER_STUDIO_2_EXECUTABLE = "MounRiver Studio 2.exe";
+const MOUN_RIVER_STUDIO_EXECUTABLES = process.platform === "linux"
+  ? ["mounriver-studio 3", "MounRiver_Studio", "MounRiver Studio 3", "MounRiver Studio 2", "MounRiver Studio"]
+  : ["MounRiver Studio 3.exe", "MounRiver Studio 2.exe"];
+
+function executableName(name: string): string {
+  return process.platform === "linux" ? name.replace(/\.exe$/i, "") : name;
+}
 
 export function resolveMounRiverStudioExecutable(
   rootPath: string,
@@ -70,12 +75,9 @@ export function resolveMounRiverStudioExecutable(
     return undefined;
   }
 
-  const executableName = exists(
-    path.join(rootPath, MOUN_RIVER_STUDIO_3_EXECUTABLE),
-  )
-    ? MOUN_RIVER_STUDIO_3_EXECUTABLE
-    : MOUN_RIVER_STUDIO_2_EXECUTABLE;
-  return path.join(rootPath, executableName);
+  return MOUN_RIVER_STUDIO_EXECUTABLES
+    .map((name) => path.join(rootPath, name))
+    .find(exists) ?? path.join(rootPath, MOUN_RIVER_STUDIO_EXECUTABLES[0]);
 }
 
 export function getConfiguredMounRiverStudioPath(): string {
@@ -137,12 +139,12 @@ export function resolveToolchainPaths(
   return {
     rootPath,
     make: path.join(rootPath, ...MAKE_EXECUTABLE_SEGMENTS),
-    gcc: path.join(binPath, resolvedToolchain.executables.gcc),
-    gpp: path.join(binPath, resolvedToolchain.executables.gpp),
-    gdb: path.join(binPath, `${resolvedToolchain.executablePrefix}gdb.exe`),
-    objcopy: path.join(binPath, resolvedToolchain.executables.objcopy),
-    objdump: path.join(binPath, resolvedToolchain.executables.objdump),
-    size: path.join(binPath, resolvedToolchain.executables.size),
+    gcc: path.join(binPath, executableName(resolvedToolchain.executables.gcc)),
+    gpp: path.join(binPath, executableName(resolvedToolchain.executables.gpp)),
+    gdb: path.join(binPath, executableName(`${resolvedToolchain.executablePrefix}gdb`)),
+    objcopy: path.join(binPath, executableName(resolvedToolchain.executables.objcopy)),
+    objdump: path.join(binPath, executableName(resolvedToolchain.executables.objdump)),
+    size: path.join(binPath, executableName(resolvedToolchain.executables.size)),
   };
 }
 
@@ -157,7 +159,7 @@ export function resolveOpenOcdPaths(
   const binPath = path.join(rootPath, ...OPENOCD_BIN_SEGMENTS);
   return {
     root: openOcdRootPath,
-    executable: path.join(binPath, "openocd.exe"),
+    executable: path.join(binPath, executableName("openocd")),
     config: path.join(binPath, "wch-riscv.cfg"),
     scripts: path.join(openOcdRootPath, "share", "openocd", "scripts"),
   };
@@ -280,7 +282,7 @@ function resolveWchOpenOcdVariablePath(
     return undefined;
   }
 
-  return path.join(openOcdRootPath, match[1]);
+  return path.join(openOcdRootPath, executableName(match[1]));
 }
 
 export function resolveToolchainDirectoryName(
@@ -310,14 +312,18 @@ export function resolveCompilerExecutableName(
   gdbExecutable: string,
 ): string | undefined {
   const toolExecutablePrefix = resolveToolExecutablePrefix(gdbExecutable);
-  return toolExecutablePrefix ? `${toolExecutablePrefix}gcc.exe` : undefined;
+  return toolExecutablePrefix
+    ? executableName(`${toolExecutablePrefix}gcc.exe`)
+    : undefined;
 }
 
 export function resolveGdbExecutableName(
   gdbExecutable: string,
 ): string | undefined {
   const toolExecutablePrefix = resolveToolExecutablePrefix(gdbExecutable);
-  return toolExecutablePrefix ? `${toolExecutablePrefix}gdb.exe` : undefined;
+  return toolExecutablePrefix
+    ? executableName(`${toolExecutablePrefix}gdb.exe`)
+    : undefined;
 }
 
 export function resolveToolExecutablePrefix(

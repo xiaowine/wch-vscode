@@ -227,7 +227,7 @@ function createBuildTask(
     {
       cwd: project.outputDirectory,
       env: {
-        PATH: `${path.dirname(project.toolchainPaths.gcc)};${process.env.PATH ?? ""}`,
+        PATH: `${path.dirname(project.toolchainPaths.gcc)}${path.delimiter}${process.env.PATH ?? ""}`,
       },
     },
   );

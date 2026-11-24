@@ -222,7 +222,9 @@ function reportOutcome(outcome: MounRiverSilentOutcome): void {
 }
 
 function getMounRiverSilentProfileDirectory(): string {
-    const base = process.env.LOCALAPPDATA || process.env.APPDATA || os.tmpdir();
+    const base = process.platform === "linux"
+        ? process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share")
+        : process.env.LOCALAPPDATA || process.env.APPDATA || os.tmpdir();
     return path.join(base, "wch-vscode", "mrs-cli-portable");
 }
 
