@@ -64,7 +64,7 @@ function buildMakefile(
 	const cleanCommands = buildCleanCommands(project);
 
 	return [
-		'SHELL := cmd',
+		`SHELL := ${process.platform === 'linux' ? '/bin/sh' : 'cmd'}`,
 		'.DELETE_ON_ERROR:',
 		'.PHONY: all build-main pre-build post-build clean size-report',
 		'',
@@ -331,8 +331,12 @@ function buildCleanCommands(project: ResolvedBuildProject): string[] {
 		.sort((left, right) => right.localeCompare(left, 'en'));
 
 	return [
-		...generatedFiles.map((value) => `\t@if exist "${toCmdPath(value)}" del /f /q "${toCmdPath(value)}"`),
-		...generatedDirectories.map((value) => `\t@if exist "${toCmdPath(value)}" rmdir /s /q "${toCmdPath(value)}"`),
+		...generatedFiles.map((value) => process.platform === 'linux'
+			? `\t@rm -f "${toToolPath(value)}"`
+			: `\t@if exist "${toCmdPath(value)}" del /f /q "${toCmdPath(value)}"`),
+		...generatedDirectories.map((value) => process.platform === 'linux'
+			? `\t@rm -rf "${toToolPath(value)}"`
+			: `\t@if exist "${toCmdPath(value)}" rmdir /s /q "${toCmdPath(value)}"`),
 	];
 }
 

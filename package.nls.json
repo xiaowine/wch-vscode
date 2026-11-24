@@ -16,7 +16,7 @@
   "view.overview": "Overview",
   "view.tools": "Settings & Tools",
   "configuration.title": "wch-vscode",
-  "configuration.mounRiverStudioPath.description": "MounRiver Studio installation root, e.g. F:\\MounRiver\\MounRiver_Studio2",
+  "configuration.mounRiverStudioPath.description": "MounRiver Studio installation root. Windows example: F:\\MounRiver\\MounRiver_Studio2. Default Linux path: /usr/share/MRS3/MRS-linux-x64.",
   "configuration.buildMethod.description": "Select how WCH projects are built: the extension parses the project parameters and calls make, or MRS parses the parameters and builds.",
   "configuration.buildMethod.make.label": "Plugin parses parameters",
   "configuration.buildMethod.mrsCli.label": "MRS parses parameters",
